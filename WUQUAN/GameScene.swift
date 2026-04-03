@@ -155,8 +155,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var musicButton: SKLabelNode?
     
     // Characters
-    private var playerCharacter: CharacterNode?
-    private var characterNode: CharacterNode?
+    private var playerCharacter: SpriteCharacterNode?
+    private var characterNode: SpriteCharacterNode?
 
     // Settings System
     private var settingsOverlay: SKNode?
@@ -408,7 +408,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         addChild(playerLabel)
 
         // Player animated character (mirrored to face AI)
-        let pChar = CharacterNode(height: charHeight, style: playerStyle, mirrored: true)
+        let pChar = SpriteCharacterNode(height: charHeight, style: playerStyle, mirrored: true)
         pChar.position = CGPoint(x: playerX, y: centerY - charHeight * 0.1)
         addChild(pChar)
         playerCharacter = pChar
@@ -450,7 +450,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         addChild(aiLabel)
 
         // AI animated character
-        let character = CharacterNode(height: charHeight, style: opponentStyle)
+        let character = SpriteCharacterNode(height: charHeight, style: opponentStyle)
         character.position = CGPoint(x: aiX, y: centerY - charHeight * 0.1)
         addChild(character)
         characterNode = character

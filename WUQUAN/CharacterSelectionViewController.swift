@@ -260,7 +260,7 @@ class CharacterCell: UICollectionViewCell {
         case player, opponent
     }
 
-    private var emojiLabel: UILabel!
+    private var spriteImageView: UIImageView!
     private var nameLabel: UILabel!
 
     override init(frame: CGRect) {
@@ -279,14 +279,13 @@ class CharacterCell: UICollectionViewCell {
         contentView.layer.borderWidth = 2
         contentView.layer.borderColor = UIColor(white: 0.3, alpha: 1).cgColor
 
-        emojiLabel = UILabel()
-        emojiLabel.font = UIFont.systemFont(ofSize: 32)
-        emojiLabel.textAlignment = .center
-        emojiLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(emojiLabel)
+        spriteImageView = UIImageView()
+        spriteImageView.contentMode = .scaleAspectFit
+        spriteImageView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(spriteImageView)
 
         nameLabel = UILabel()
-        nameLabel.font = UIFont.systemFont(ofSize: 11)
+        nameLabel.font = UIFont.boldSystemFont(ofSize: 10)
         nameLabel.textColor = .lightGray
         nameLabel.textAlignment = .center
         nameLabel.adjustsFontSizeToFitWidth = true
@@ -295,18 +294,27 @@ class CharacterCell: UICollectionViewCell {
         contentView.addSubview(nameLabel)
 
         NSLayoutConstraint.activate([
-            emojiLabel.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            emojiLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor, constant: -8),
+            spriteImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            spriteImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 4),
+            spriteImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
+            spriteImageView.bottomAnchor.constraint(equalTo: nameLabel.topAnchor, constant: -2),
 
-            nameLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -6),
+            nameLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
             nameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 4),
-            nameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4)
+            nameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -4),
+            nameLabel.heightAnchor.constraint(equalToConstant: 14)
         ])
     }
 
     func configure(with style: CharacterStyle) {
-        emojiLabel.text = style.emoji
         nameLabel.text = style.name
+        // Load idle sprite for preview
+        if let path = Bundle.main.path(forResource: "\(style.id)_idle", ofType: "png") {
+            spriteImageView.image = UIImage(contentsOfFile: path)
+        } else {
+            // Fallback to emoji
+            spriteImageView.image = nil
+        }
     }
 
     func setSelected(role: SelectedRole?) {
