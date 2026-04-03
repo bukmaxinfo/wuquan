@@ -128,6 +128,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var playerDirection: Direction?
     private var aiDirection: Direction?
     private var handshakeAnimationTimer: Timer?
+    private var currentStreak: Int = 0
+    private var selectionTimer: Timer?
+    private var timerLabel: SKLabelNode?
+    private var selectionDeadline: Date?
     private var playerGestureHistory: [Gesture] = []
     private var difficulty: Difficulty = Difficulty(rawValue: UserDefaults.standard.integer(forKey: "difficulty")) ?? .medium
     private var roundCount = 0
@@ -1074,8 +1078,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     
     private func startHandshakePhase() {
         gamePhase = .handshake(step: 1)
-        phaseLabel?.text = "握手阶段 (1/4)"
-        instructionLabel?.text = "与对手握手四次..."
+        phaseLabel?.text = "握手阶段 (1/2)"
+        instructionLabel?.text = "与对手握手..."
         
         // Slow down music for handshake phase
         adjustMusicTempo(0.8)
@@ -1097,9 +1101,9 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         guard case .handshake(let step) = gamePhase else { return }
         playHandshakeSound()
 
-        if step < 4 {
+        if step < 2 {
             gamePhase = .handshake(step: step + 1)
-            phaseLabel?.text = "握手阶段 (\(step + 1)/4)"
+            phaseLabel?.text = "握手阶段 (\(step + 1)/2)"
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.animateHandshake()
             }
@@ -1110,7 +1114,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     
     private func startFreeMovementPhase() {
         gamePhase = .freeMovement(step: 1)
-        phaseLabel?.text = "自由晃动 (1/4)"
+        phaseLabel?.text = "自由晃动 (1/2)"
         instructionLabel?.text = "疯狂晃动手腕！"
         
         // Speed up music for free movement phase
@@ -1132,9 +1136,9 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func completeFreeMovementStep() {
         guard case .freeMovement(let step) = gamePhase else { return }
         
-        if step < 4 {
+        if step < 2 {
             gamePhase = .freeMovement(step: step + 1)
-            phaseLabel?.text = "自由晃动 (\(step + 1)/4)"
+            phaseLabel?.text = "自由晃动 (\(step + 1)/2)"
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 self.animateFreeMovement()
             }
@@ -1159,6 +1163,26 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
 
         // Character enters thinking pose
         characterNode?.setExpression(.smirk)
+
+        // AI tell — character briefly hints at chosen gesture
+        if let aiG = aiGesture {
+            let tellDelay: TimeInterval
+            let tellDuration: TimeInterval
+            switch difficulty {
+            case .easy:
+                tellDelay = 0.5
+                tellDuration = 0.8  // Obvious tell
+            case .medium:
+                tellDelay = 0.3
+                tellDuration = 0.4  // Subtle tell
+            case .hard:
+                // 50% chance of bluff on hard
+                tellDelay = 0.2
+                tellDuration = 0.3
+            }
+            let gestureToShow = (difficulty == .hard && Bool.random()) ? Gesture.allCases.randomElement()! : aiG
+            characterNode?.animateTell(gestureToShow, delay: tellDelay, duration: tellDuration)
+        }
     }
     
     private func showGestureButtons() {
@@ -1188,9 +1212,17 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             button.name = "gesture_\(gesture)"
             addChild(button)
         }
+
+        // Start selection timer
+        startSelectionTimer(buttonAreaY: buttonAreaY + buttonSize * 1.5) {
+            let randomGesture = Gesture.allCases.randomElement() ?? .rock
+            self.selectGesture(randomGesture)
+            self.instructionLabel?.text = "超时！随机选择：\(randomGesture.emoji)"
+        }
     }
-    
+
     private func selectGesture(_ gesture: Gesture) {
+        cancelSelectionTimer()
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         playSelectSound()
         playerGesture = gesture
@@ -1363,9 +1395,17 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             button.name = "direction_\(direction)"
             addChild(button)
         }
+
+        // Start selection timer
+        startSelectionTimer(buttonAreaY: centerY + offset + buttonSize * 1.5) {
+            let randomDirection = Direction.allCases.randomElement() ?? .up
+            self.selectDirection(randomDirection)
+            self.instructionLabel?.text = "超时！随机选择：\(randomDirection.emoji)"
+        }
     }
-    
+
     private func selectDirection(_ direction: Direction) {
+        cancelSelectionTimer()
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         playSelectSound()
         playerDirection = direction
@@ -1399,6 +1439,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
 
         switch result {
         case .continueGame:
+            currentStreak += 1
             let sameGesture = playerGesture == aiGesture
             resultText = sameGesture ? "正确! 手势相同，方向相同" : "正确! 手势不同，方向不同"
             winner = "继续游戏"
@@ -1408,8 +1449,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             playerCharacter?.setExpression(.neutral)
             characterNode?.setExpression(.neutral)
         case .playerLoses:
-            resultText = "错误! 违反规则 — 喝酒！🍺"
+            let multiplier = max(1, currentStreak)
+            resultText = "错误! 违反规则 — 喝\(multiplier)杯！🍺"
             winner = "玩家失败 😢"
+            currentStreak = 0
             gameScore.ai += 1
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             playFailureSound()
@@ -1417,8 +1460,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             playerCharacter?.animateDrink()
             characterNode?.animateWin()
         case .aiLoses:
-            resultText = "错误! 违反规则 — 对手喝酒！🍺"
+            let multiplier = max(1, currentStreak)
+            resultText = "错误! 违反规则 — 对手喝\(multiplier)杯！🍺"
             winner = "对手失败 🎉"
+            currentStreak = 0
             gameScore.player += 1
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             playSuccessSound()
@@ -1428,6 +1473,32 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         }
         
         roundCount += 1
+
+        // Round escalation effects
+        if roundCount >= 8 {
+            // Sudden death feel — dark vignette
+            if childNode(withName: "vignette") == nil {
+                let vignette = SKShapeNode(rect: CGRect(origin: .zero, size: size))
+                vignette.fillColor = .black
+                vignette.alpha = 0.0
+                vignette.zPosition = 50
+                vignette.name = "vignette"
+                vignette.isUserInteractionEnabled = false
+                addChild(vignette)
+            }
+            let targetAlpha: CGFloat = CGFloat(roundCount - 7) * 0.08
+            childNode(withName: "vignette")?.run(SKAction.fadeAlpha(to: targetAlpha, duration: 0.5))
+        }
+
+        // Speed up music based on round
+        if roundCount <= 3 {
+            adjustMusicTempo(0.9)
+        } else if roundCount <= 7 {
+            adjustMusicTempo(1.1)
+        } else {
+            adjustMusicTempo(1.3)
+        }
+
         phaseLabel?.text = winner
         instructionLabel?.text = resultText
         updateScoreDisplay()
@@ -1489,6 +1560,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         aiDirection = nil
         playerGestureLabel?.text = ""
         aiGestureLabel?.text = ""
+        cancelSelectionTimer()
 
         playerCharacter?.resetPose()
         playerCharacter?.animateIdle()
@@ -1501,15 +1573,22 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func resetFullGame() {
         roundCount = 0
         gameScore = (player: 0, ai: 0)
+        currentStreak = 0
         playerGestureHistory.removeAll()
+        cancelSelectionTimer()
         updateScoreDisplay()
         childNode(withName: "restartButton")?.removeFromParent()
+        childNode(withName: "vignette")?.removeFromParent()
         resetGame()
     }
 
     private func updateScoreDisplay() {
         if let scoreLabel = childNode(withName: "scoreLabel") as? SKLabelNode {
-            scoreLabel.text = "玩家 \(gameScore.player) : \(gameScore.ai) 对手  (\(roundCount)/\(maxRounds))"
+            var text = "玩家 \(gameScore.player) : \(gameScore.ai) 对手  (\(roundCount)/\(maxRounds))"
+            if currentStreak > 0 {
+                text += " 🔥x\(currentStreak)"
+            }
+            scoreLabel.text = text
         }
         UserDefaults.standard.set(gameScore.player, forKey: "playerScore")
         UserDefaults.standard.set(gameScore.ai, forKey: "aiScore")
@@ -2092,8 +2171,79 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         overlay.run(pulseSequence)
     }
     
+    // MARK: - Selection Timer
+
+    private func selectionTimeout() -> TimeInterval {
+        switch roundCount {
+        case 0...2: return 4.0
+        case 3...6: return 3.0
+        default:    return 2.0
+        }
+    }
+
+    private func startSelectionTimer(buttonAreaY: CGFloat, onTimeout: @escaping () -> Void) {
+        cancelSelectionTimer()
+
+        let timeout = selectionTimeout()
+        selectionDeadline = Date().addingTimeInterval(timeout)
+
+        // Create timer label
+        let label = SKLabelNode(text: "\(Int(timeout))")
+        label.fontSize = min(size.width, size.height) * 0.08
+        label.fontColor = .white
+        label.fontName = "Helvetica-Bold"
+        label.position = CGPoint(x: size.width / 2, y: buttonAreaY)
+        label.zPosition = 50
+        label.name = "selectionTimerLabel"
+        addChild(label)
+        timerLabel = label
+
+        selectionTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] timer in
+            guard let self = self, let deadline = self.selectionDeadline else {
+                timer.invalidate()
+                return
+            }
+            let remaining = deadline.timeIntervalSinceNow
+            if remaining <= 0 {
+                timer.invalidate()
+                self.selectionTimer = nil
+                self.selectionDeadline = nil
+                self.timerLabel?.removeFromParent()
+                self.timerLabel = nil
+                onTimeout()
+            } else {
+                let displaySeconds = Int(ceil(remaining))
+                self.timerLabel?.text = "\(displaySeconds)"
+                if remaining <= 1.0 {
+                    self.timerLabel?.fontColor = .red
+                    // Flash effect
+                    let flash = SKAction.sequence([
+                        SKAction.fadeAlpha(to: 0.3, duration: 0.05),
+                        SKAction.fadeAlpha(to: 1.0, duration: 0.05)
+                    ])
+                    if self.timerLabel?.hasActions() == false {
+                        self.timerLabel?.run(SKAction.repeatForever(flash), withKey: "timerFlash")
+                    }
+                } else {
+                    self.timerLabel?.fontColor = .white
+                    self.timerLabel?.removeAction(forKey: "timerFlash")
+                    self.timerLabel?.alpha = 1.0
+                }
+            }
+        }
+    }
+
+    private func cancelSelectionTimer() {
+        selectionTimer?.invalidate()
+        selectionTimer = nil
+        selectionDeadline = nil
+        timerLabel?.removeFromParent()
+        timerLabel = nil
+    }
+
     deinit {
         handshakeAnimationTimer?.invalidate()
+        selectionTimer?.invalidate()
         backgroundMusicPlayer?.stop()
     }
 }

@@ -549,6 +549,25 @@ class CharacterNode: SKNode {
         ]))
     }
 
+    func animateTell(_ gesture: Gesture, delay: TimeInterval, duration: TimeInterval) {
+        // Briefly flash the gesture on the right hand then hide it
+        let showTell = SKAction.sequence([
+            SKAction.wait(forDuration: delay),
+            SKAction.run { self.rightHand.text = gesture.emoji },
+            SKAction.run {
+                let raise = SKAction.rotate(toAngle: 0.3, duration: 0.15)
+                self.rightArm.run(raise)
+            },
+            SKAction.wait(forDuration: duration),
+            SKAction.run { self.rightHand.text = "✊" },
+            SKAction.run {
+                let lower = SKAction.rotate(toAngle: 0, duration: 0.15)
+                self.rightArm.run(lower)
+            }
+        ])
+        self.run(showTell)
+    }
+
     func animateIdle() {
         let breatheIn = SKAction.moveBy(x: 0, y: 2 * scale, duration: 1.5)
         breatheIn.timingMode = .easeInEaseOut
