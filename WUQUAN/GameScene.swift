@@ -127,7 +127,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var aiGesture: Gesture?
     private var playerDirection: Direction?
     private var aiDirection: Direction?
-    private var handshakeAnimationTimer: Timer?
     private var currentStreak: Int = 0
     private var selectionTimer: Timer?
     private var timerLabel: SKLabelNode?
@@ -136,6 +135,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var difficulty: Difficulty = Difficulty(rawValue: UserDefaults.standard.integer(forKey: "difficulty")) ?? .medium
     private var roundCount = 0
     private let maxRounds = 10
+    private var totalDrinksThisGame = 0
+    private var bestStreakThisGame = 0
+    private var gestureCountsThisGame: [Gesture: Int] = [.rock: 0, .paper: 0, .scissors: 0]
+    private var isDismissingTutorial = false
     private var totalGamesPlayed: Int {
         get { UserDefaults.standard.integer(forKey: "totalGamesPlayed") }
         set { UserDefaults.standard.set(newValue, forKey: "totalGamesPlayed") }
@@ -221,6 +224,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
 
     private func dismissTutorial() {
+        guard !isDismissingTutorial else { return }
+        isDismissingTutorial = true
         UserDefaults.standard.set(true, forKey: "hasSeenTutorial")
         children.filter { $0.name == "tutorialOverlay" }.forEach { node in
             node.run(SKAction.sequence([
@@ -703,8 +708,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         aiHandNode?.removeAllActions()
         
         // Pause any timer-based animations
-        handshakeAnimationTimer?.invalidate()
-        
         // Pause any gesture or direction selection timers if they exist
         removeAction(forKey: "gamePhaseTimer")
     }
@@ -798,126 +801,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         return MusicStore.shared.getTrack(by: selectedURL)
     }
     
-    private func createDashedBorder(rect: CGRect) {
-        let dashLength: CGFloat = 10
-        let gapLength: CGFloat = 5
-        let lineWidth: CGFloat = 4
-        
-        // Top border
-        createDashedLine(
-            start: CGPoint(x: rect.minX, y: rect.maxY),
-            end: CGPoint(x: rect.maxX, y: rect.maxY),
-            dashLength: dashLength,
-            gapLength: gapLength,
-            lineWidth: lineWidth
-        )
-        
-        // Bottom border
-        createDashedLine(
-            start: CGPoint(x: rect.minX, y: rect.minY),
-            end: CGPoint(x: rect.maxX, y: rect.minY),
-            dashLength: dashLength,
-            gapLength: gapLength,
-            lineWidth: lineWidth
-        )
-        
-        // Left border
-        createDashedLine(
-            start: CGPoint(x: rect.minX, y: rect.minY),
-            end: CGPoint(x: rect.minX, y: rect.maxY),
-            dashLength: dashLength,
-            gapLength: gapLength,
-            lineWidth: lineWidth
-        )
-        
-        // Right border
-        createDashedLine(
-            start: CGPoint(x: rect.maxX, y: rect.minY),
-            end: CGPoint(x: rect.maxX, y: rect.maxY),
-            dashLength: dashLength,
-            gapLength: gapLength,
-            lineWidth: lineWidth
-        )
-    }
-    
-    private func createDashedLine(start: CGPoint, end: CGPoint, dashLength: CGFloat, gapLength: CGFloat, lineWidth: CGFloat) {
-        let totalLength = sqrt(pow(end.x - start.x, 2) + pow(end.y - start.y, 2))
-        let segmentLength = dashLength + gapLength
-        let numSegments = Int(totalLength / segmentLength)
-        
-        let dx = (end.x - start.x) / totalLength
-        let dy = (end.y - start.y) / totalLength
-        
-        for i in 0..<numSegments {
-            let segmentStart = CGFloat(i) * segmentLength
-            let segmentEnd = min(segmentStart + dashLength, totalLength)
-            
-            if segmentEnd > segmentStart {
-                let dashStart = CGPoint(
-                    x: start.x + dx * segmentStart,
-                    y: start.y + dy * segmentStart
-                )
-                let dashEnd = CGPoint(
-                    x: start.x + dx * segmentEnd,
-                    y: start.y + dy * segmentEnd
-                )
-                
-                let dashRect: CGRect
-                if abs(dx) > abs(dy) { // Horizontal line
-                    dashRect = CGRect(
-                        x: dashStart.x,
-                        y: dashStart.y - lineWidth/2,
-                        width: dashEnd.x - dashStart.x,
-                        height: lineWidth
-                    )
-                } else { // Vertical line
-                    dashRect = CGRect(
-                        x: dashStart.x - lineWidth/2,
-                        y: dashStart.y,
-                        width: lineWidth,
-                        height: dashEnd.y - dashStart.y
-                    )
-                }
-                
-                let dash = SKShapeNode(rect: dashRect)
-                dash.fillColor = .white
-                dash.strokeColor = .clear
-                addChild(dash)
-            }
-        }
-    }
-    
-    private func createCornerMarkers(rect: CGRect) {
-        let markerSize: CGFloat = 20
-        let markerThickness: CGFloat = 3
-        
-        let corners = [
-            CGPoint(x: rect.minX, y: rect.minY), // Bottom-left
-            CGPoint(x: rect.maxX, y: rect.minY), // Bottom-right
-            CGPoint(x: rect.minX, y: rect.maxY), // Top-left
-            CGPoint(x: rect.maxX, y: rect.maxY)  // Top-right
-        ]
-        
-        for corner in corners {
-            // Horizontal line
-            let hLine = SKShapeNode(rect: CGRect(x: -markerSize/2, y: -markerThickness/2, width: markerSize, height: markerThickness))
-            hLine.fillColor = .yellow
-            hLine.position = corner
-            addChild(hLine)
-            
-            // Vertical line
-            let vLine = SKShapeNode(rect: CGRect(x: -markerThickness/2, y: -markerSize/2, width: markerThickness, height: markerSize))
-            vLine.fillColor = .yellow
-            vLine.position = corner
-            addChild(vLine)
-        }
-    }
-    
-    
     private func getDeviceTypeString(width: CGFloat, height: CGFloat) -> String {
         let maxDimension = max(width, height)
         let minDimension = min(width, height)
-        
+
         // Check for exact matches first - organized by unique dimensions
         switch (minDimension, maxDimension) {
         // Simulator scaled dimensions (check first to avoid confusion)
@@ -981,52 +868,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         }
     }
     
-    private func presentMusicPicker() {
-        // Try multiple methods to get the view controller
-        var viewController: UIViewController?
-        
-        // Method 1: Try to get from view's next responder
-        if let vc = self.view?.next as? UIViewController {
-            viewController = vc
-        }
-        // Method 2: Try to traverse responder chain
-        else if let view = self.view {
-            var responder = view.next
-            while responder != nil {
-                if let vc = responder as? UIViewController {
-                    viewController = vc
-                    break
-                }
-                responder = responder?.next
-            }
-        }
-        // Method 3: Get from scene's parent view controller (fallback)
-        else if let view = self.view,
-                let window = view.window,
-                let rootVC = window.rootViewController {
-            viewController = rootVC
-        }
-        
-        guard let presentingVC = viewController else {
-            print("ERROR: Could not find view controller to present music picker")
-            return
-        }
-        
-        // Check if the presenting view controller can present
-        if presentingVC.presentedViewController != nil {
-            print("ERROR: Presenting view controller already has a presented view controller")
-            return
-        }
-        
-        let mediaPicker = MPMediaPickerController(mediaTypes: .music)
-        mediaPicker.delegate = self
-        mediaPicker.allowsPickingMultipleItems = false
-        mediaPicker.prompt = "选择背景音乐"
-        mediaPicker.modalPresentationStyle = .formSheet
-        
-        presentingVC.present(mediaPicker, animated: true)
-    }
-    
     private func playBackgroundMusic() {
         guard let musicURL = selectedMusicURL else { return }
         
@@ -1049,16 +890,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         musicButton?.text = "🎵 选择音乐"
     }
     
-    private func toggleMusic() {
-        if backgroundMusicPlayer?.isPlaying == true {
-            stopBackgroundMusic()
-        } else if selectedMusicURL != nil {
-            playBackgroundMusic()
-        } else {
-            presentMusicPicker()
-        }
-    }
-    
     private func adjustMusicTempo(_ rate: Float) {
         guard let player = backgroundMusicPlayer, player.isPlaying else { return }
         player.rate = rate
@@ -1066,13 +897,21 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func startHandshakePhase() {
+        playerCharacter?.stopIdle()
+        characterNode?.stopIdle()
         gamePhase = .handshake(step: 1)
         phaseLabel?.text = "握手阶段 (1/2)"
         instructionLabel?.text = "与对手握手..."
-        
-        // Slow down music for handshake phase
+
+        // Round announcement (skip round 0 — first round after reset)
+        if roundCount > 0 {
+            AnnouncementNode.showRoundAnnouncement(round: roundCount + 1, maxRounds: maxRounds, in: self)
+        }
+
+        // Phase flash
+        AnnouncementNode.flashScreen(color: SKColor(red: 0.0, green: 0.8, blue: 1.0, alpha: 1.0), in: self)
+
         adjustMusicTempo(0.8)
-        
         animateHandshake()
     }
     
@@ -1169,7 +1008,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
                 tellDelay = 0.2
                 tellDuration = 0.3
             }
-            let gestureToShow = (difficulty == .hard && Bool.random()) ? Gesture.allCases.randomElement()! : aiG
+            let gestureToShow = (difficulty == .hard && Bool.random()) ? Gesture.allCases.randomElement() ?? .rock : aiG
             characterNode?.animateTell(gestureToShow, delay: tellDelay, duration: tellDuration)
         }
     }
@@ -1217,20 +1056,42 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         playSelectSound()
         playerGesture = gesture
         playerGestureHistory.append(gesture)
+        gestureCountsThisGame[gesture, default: 0] += 1
         playerGestureLabel?.text = gesture.emoji
         aiGestureLabel?.text = aiGesture?.emoji ?? ""
 
-        // Both characters reveal gestures with animation
-        playerCharacter?.animateGestureReveal(gesture)
-        if let aiG = aiGesture {
-            characterNode?.animateGestureReveal(aiG)
-        }
-
         // Remove gesture buttons
         children.filter { $0.name?.hasPrefix("gesture_") == true }.forEach { $0.removeFromParent() }
-        
-        // Show gestures twice as per rules
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+
+        // Dramatic pause — dim screen, then reveal both gestures
+        let dimOverlay = SKShapeNode(rect: CGRect(origin: .zero, size: size))
+        dimOverlay.fillColor = .black
+        dimOverlay.alpha = 0
+        dimOverlay.zPosition = 80
+        dimOverlay.name = "revealDim"
+        addChild(dimOverlay)
+
+        // Dim
+        dimOverlay.run(SKAction.fadeAlpha(to: 0.3, duration: 0.2))
+
+        // After pause, reveal
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.playerCharacter?.animateGestureReveal(gesture)
+            if let aiG = self.aiGesture {
+                self.characterNode?.animateGestureReveal(aiG)
+            }
+            AnnouncementNode.flashScreen(color: .white, in: self)
+
+            // Undim and continue
+            dimOverlay.run(SKAction.sequence([
+                SKAction.wait(forDuration: 0.8),
+                SKAction.fadeAlpha(to: 0, duration: 0.3),
+                SKAction.removeFromParent()
+            ]))
+        }
+
+        // Continue to direction phase
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             self.startDirectionPointingPhase()
         }
     }
@@ -1269,9 +1130,21 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             return
         }
 
-        // Handle restart button tap
-        if touchedNode.name == "restartButton" {
+        // Handle game over buttons
+        if touchedNode.name == "playAgainButton" {
+            childNode(withName: "gameOverNode")?.removeFromParent()
             resetFullGame()
+            return
+        }
+        if touchedNode.name == "changeCharacterButton" {
+            // Go back to character selection
+            childNode(withName: "gameOverNode")?.removeFromParent()
+            if let vc = self.view?.next as? UIViewController {
+                let selectionVC = CharacterSelectionViewController()
+                selectionVC.delegate = vc as? CharacterSelectionDelegate
+                selectionVC.modalPresentationStyle = .fullScreen
+                vc.present(selectionVC, animated: true)
+            }
             return
         }
 
@@ -1330,7 +1203,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             instructionLabel?.text = "手势不同，选择不同方向"
             // Different gesture: AI wants to differ from player's direction
             // Spread evenly since we want to avoid matching
-            aiDirection = Direction.allCases.randomElement()
+            aiDirection = Direction.allCases.randomElement() ?? .up
         }
 
         showDirectionButtons()
@@ -1431,6 +1304,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         switch result {
         case .continueGame:
             currentStreak += 1
+            bestStreakThisGame = max(bestStreakThisGame, currentStreak)
             let sameGesture = playerGesture == aiGesture
             resultText = sameGesture ? "正确! 手势相同，方向相同" : "正确! 手势不同，方向不同"
             winner = "继续游戏"
@@ -1439,9 +1313,13 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             showSuccessEffect()
             playerCharacter?.setExpression(.neutral)
             characterNode?.setExpression(.neutral)
+            // Combo announcement
+            AnnouncementNode.showCombo(streak: currentStreak, in: self)
+            AnnouncementNode.updateStreakBorder(streak: currentStreak, in: self)
         case .playerLoses:
             let multiplier = max(1, currentStreak)
-            resultText = "错误! 违反规则 — 喝\(multiplier)杯！🍺"
+            totalDrinksThisGame += multiplier
+            resultText = "违反规则!"
             winner = "玩家失败 😢"
             currentStreak = 0
             gameScore.ai += 1
@@ -1450,9 +1328,12 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             showFailureEffect()
             playerCharacter?.animateDrink()
             characterNode?.animateWin()
+            AnnouncementNode.showDrinkCall(count: multiplier, isPlayer: true, in: self)
+            AnnouncementNode.updateStreakBorder(streak: 0, in: self)
         case .aiLoses:
             let multiplier = max(1, currentStreak)
-            resultText = "错误! 违反规则 — 对手喝\(multiplier)杯！🍺"
+            totalDrinksThisGame += multiplier
+            resultText = "违反规则!"
             winner = "对手失败 🎉"
             currentStreak = 0
             gameScore.player += 1
@@ -1461,6 +1342,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             showVictoryEffect()
             playerCharacter?.animateWin()
             characterNode?.animateDrink()
+            AnnouncementNode.showDrinkCall(count: multiplier, isPlayer: false, in: self)
+            AnnouncementNode.updateStreakBorder(streak: 0, in: self)
         }
         
         roundCount += 1
@@ -1512,36 +1395,38 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func showGameOver() {
         gamePhase = .result
         let playerWon = gameScore.player > gameScore.ai
-        let tied = gameScore.player == gameScore.ai
 
         totalGamesPlayed += 1
         if playerWon { totalWins += 1 }
 
-        if tied {
-            phaseLabel?.text = "平局！"
-            instructionLabel?.text = "比分 \(gameScore.player) : \(gameScore.ai) — 再来一局？"
-        } else if playerWon {
-            phaseLabel?.text = "你赢了！🏆"
-            instructionLabel?.text = "最终比分 \(gameScore.player) : \(gameScore.ai)"
+        // Find favorite gesture
+        let favorite = gestureCountsThisGame.max(by: { $0.value < $1.value })?.key ?? .rock
+
+        // Show game over overlay
+        let gameOver = GameOverNode(
+            size: size,
+            playerScore: gameScore.player,
+            aiScore: gameScore.ai,
+            playerName: playerStyle.name,
+            opponentName: opponentStyle.name,
+            totalDrinks: totalDrinksThisGame,
+            bestStreak: bestStreakThisGame,
+            favoriteGesture: favorite.emoji,
+            roundsPlayed: roundCount
+        )
+        gameOver.name = "gameOverNode"
+        gameOver.zPosition = 300
+        addChild(gameOver)
+
+        if playerWon {
             showVictoryEffect()
-        } else {
-            phaseLabel?.text = "对手获胜！"
-            instructionLabel?.text = "最终比分 \(gameScore.player) : \(gameScore.ai)"
+            playerCharacter?.animateWin()
+            characterNode?.animateLose()
+        } else if gameScore.ai > gameScore.player {
             showFailureEffect()
+            playerCharacter?.animateLose()
+            characterNode?.animateWin()
         }
-
-        let restartLabel = SKLabelNode(text: "点击重新开始")
-        restartLabel.fontSize = min(size.width, size.height) * 0.04
-        restartLabel.fontColor = .cyan
-        restartLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.15)
-        restartLabel.name = "restartButton"
-        addChild(restartLabel)
-
-        let pulse = SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.4, duration: 0.8),
-            SKAction.fadeAlpha(to: 1.0, duration: 0.8)
-        ])
-        restartLabel.run(SKAction.repeatForever(pulse))
     }
 
     private func resetGame() {
@@ -1565,11 +1450,16 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         roundCount = 0
         gameScore = (player: 0, ai: 0)
         currentStreak = 0
+        totalDrinksThisGame = 0
+        bestStreakThisGame = 0
+        gestureCountsThisGame = [.rock: 0, .paper: 0, .scissors: 0]
         playerGestureHistory.removeAll()
         cancelSelectionTimer()
         updateScoreDisplay()
         childNode(withName: "restartButton")?.removeFromParent()
+        childNode(withName: "gameOverNode")?.removeFromParent()
         childNode(withName: "vignette")?.removeFromParent()
+        childNode(withName: "streakBorder")?.removeFromParent()
         resetGame()
     }
 
@@ -1783,192 +1673,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         
         failureLabel.run(SKAction.sequence([SKAction.group([slideDown, fade]), remove]))
     }
-    
-    private func addDebugOverlays() {
-        let screenWidth = size.width
-        let screenHeight = size.height
-        var safeAreaTop: CGFloat = 44
-        var safeAreaBottom: CGFloat = 34
-        
-        // Get real safe area from the view
-        if let view = self.view {
-            let rawSafeAreaTop = view.safeAreaInsets.top
-            let rawSafeAreaBottom = view.safeAreaInsets.bottom
 
-            // Handle case where safe area is 0 (common in simulator or older devices)
-            if rawSafeAreaTop == 0 && rawSafeAreaBottom == 0 {
-                // Use device-specific fallbacks based on screen size
-                if screenHeight >= 812 { // iPhone X and newer
-                    safeAreaTop = 47  // Notch/Dynamic Island
-                    safeAreaBottom = 34  // Home indicator
-                } else if screenHeight >= 736 { // iPhone Plus models
-                    safeAreaTop = 20  // Status bar
-                    safeAreaBottom = 0
-                } else { // Older iPhones
-                    safeAreaTop = 20  // Status bar
-                    safeAreaBottom = 0
-                }
-            } else {
-                safeAreaTop = rawSafeAreaTop
-                safeAreaBottom = rawSafeAreaBottom
-            }
-        }
-        
-        // FULL SCREEN DEBUG OVERLAYS to identify coordinate system and edges
-        
-        // 1. Create a border around the entire screen to show the actual boundaries
-        let fullScreenBorder = SKShapeNode(rect: CGRect(x: 0, y: 0, width: screenWidth, height: screenHeight))
-        fullScreenBorder.fillColor = .clear
-        fullScreenBorder.strokeColor = .white
-        fullScreenBorder.lineWidth = 5
-        fullScreenBorder.position = CGPoint.zero
-        addChild(fullScreenBorder)
-        
-        // 2. Create corner markers at all four corners to verify coordinate system
-        let cornerRadius: CGFloat = 15
-        let corners = [
-            CGPoint(x: cornerRadius, y: cornerRadius),                           // Bottom-left (origin)
-            CGPoint(x: screenWidth - cornerRadius, y: cornerRadius),             // Bottom-right
-            CGPoint(x: cornerRadius, y: screenHeight - cornerRadius),            // Top-left
-            CGPoint(x: screenWidth - cornerRadius, y: screenHeight - cornerRadius) // Top-right
-        ]
-        
-        let cornerColors: [SKColor] = [.yellow, .red, .green, .blue]
-        for (index, corner) in corners.enumerated() {
-            let marker = SKShapeNode(circleOfRadius: cornerRadius)
-            marker.fillColor = cornerColors[index]
-            marker.strokeColor = .white
-            marker.lineWidth = 3
-            marker.position = corner
-            addChild(marker)
-        }
-        
-        // 3. Red safe area zones
-        let contentSafeAreaTop = screenHeight * 0.12
-        let contentSafeAreaBottom = screenHeight * 0.10
-        
-        // Top safe area (RED) - should appear at the very top
-        let safeTopOverlay = SKShapeNode(rect: CGRect(x: 0, y: screenHeight - contentSafeAreaTop, width: screenWidth, height: contentSafeAreaTop))
-        safeTopOverlay.fillColor = SKColor.red
-        safeTopOverlay.alpha = 0.7
-        safeTopOverlay.strokeColor = .red
-        safeTopOverlay.lineWidth = 5
-        safeTopOverlay.position = CGPoint.zero
-        addChild(safeTopOverlay)
-        
-        // Bottom safe area (RED) - should appear at the very bottom
-        let safeBottomOverlay = SKShapeNode(rect: CGRect(x: 0, y: 0, width: screenWidth, height: contentSafeAreaBottom))
-        safeBottomOverlay.fillColor = SKColor.red
-        safeBottomOverlay.alpha = 0.7
-        safeBottomOverlay.strokeColor = .red
-        safeBottomOverlay.lineWidth = 5
-        safeBottomOverlay.position = CGPoint.zero
-        addChild(safeBottomOverlay)
-        
-        // 4. Layout zones with different colors
-        let headerHeight = screenHeight * 0.15
-        let gameAreaHeight = screenHeight * 0.4
-        let buttonAreaHeight = screenHeight * 0.25
-        let footerHeight = screenHeight * 0.12
-        
-        // Header area (BLUE)
-        let headerY = screenHeight - contentSafeAreaTop - headerHeight
-        let headerOverlay = SKShapeNode(rect: CGRect(x: 0, y: headerY, width: screenWidth, height: headerHeight))
-        headerOverlay.fillColor = SKColor.blue
-        headerOverlay.alpha = 0.3
-        headerOverlay.strokeColor = .blue
-        headerOverlay.lineWidth = 3
-        headerOverlay.position = CGPoint.zero
-        addChild(headerOverlay)
-        
-        // Game area (GREEN)
-        let gameAreaY = headerY - gameAreaHeight
-        let gameOverlay = SKShapeNode(rect: CGRect(x: 0, y: gameAreaY, width: screenWidth, height: gameAreaHeight))
-        gameOverlay.fillColor = SKColor.green
-        gameOverlay.alpha = 0.3
-        gameOverlay.strokeColor = .green
-        gameOverlay.lineWidth = 3
-        gameOverlay.position = CGPoint.zero
-        addChild(gameOverlay)
-        
-        // Button area (PURPLE)
-        let buttonAreaY = contentSafeAreaBottom + footerHeight
-        let buttonOverlay = SKShapeNode(rect: CGRect(x: 0, y: buttonAreaY, width: screenWidth, height: buttonAreaHeight))
-        buttonOverlay.fillColor = SKColor.purple
-        buttonOverlay.alpha = 0.3
-        buttonOverlay.strokeColor = .purple
-        buttonOverlay.lineWidth = 3
-        buttonOverlay.position = CGPoint.zero
-        addChild(buttonOverlay)
-        
-        // Footer area (ORANGE)
-        let footerOverlay = SKShapeNode(rect: CGRect(x: 0, y: contentSafeAreaBottom, width: screenWidth, height: footerHeight))
-        footerOverlay.fillColor = SKColor.orange
-        footerOverlay.alpha = 0.3
-        footerOverlay.strokeColor = .orange
-        footerOverlay.lineWidth = 3
-        footerOverlay.position = CGPoint.zero
-        addChild(footerOverlay)
-        
-        // 5. Add coordinate labels
-        let coordinateLabels = [
-            ("(0,0)", CGPoint(x: 40, y: 30), SKColor.yellow),
-            ("(\(Int(screenWidth)),0)", CGPoint(x: screenWidth - 80, y: 30), SKColor.red),
-            ("(0,\(Int(screenHeight)))", CGPoint(x: 80, y: screenHeight - 30), SKColor.green),
-            ("(\(Int(screenWidth)),\(Int(screenHeight)))", CGPoint(x: screenWidth - 120, y: screenHeight - 30), SKColor.blue)
-        ]
-        
-        for (text, position, color) in coordinateLabels {
-            let label = SKLabelNode(text: text)
-            label.fontSize = 18
-            label.fontColor = color
-            label.fontName = "Helvetica-Bold"
-            label.position = position
-            addChild(label)
-        }
-        
-        // 6. Add device info and scaling detection
-        let deviceInfo = SKLabelNode(text: "Device: \(getDeviceTypeString(width: screenWidth, height: screenHeight))")
-        deviceInfo.fontSize = 16
-        deviceInfo.fontColor = .white
-        deviceInfo.fontName = "Helvetica-Bold"
-        deviceInfo.position = CGPoint(x: screenWidth/2, y: screenHeight/2 + 40)
-        addChild(deviceInfo)
-        
-        let scaleInfo = SKLabelNode(text: "Screen: \(Int(screenWidth))x\(Int(screenHeight))")
-        scaleInfo.fontSize = 16
-        scaleInfo.fontColor = .white
-        scaleInfo.fontName = "Helvetica-Bold"
-        scaleInfo.position = CGPoint(x: screenWidth/2, y: screenHeight/2)
-        addChild(scaleInfo)
-        
-        let simulatorWarning = SKLabelNode(text: "SIMULATOR IN SCALED MODE!")
-        simulatorWarning.fontSize = 18
-        simulatorWarning.fontColor = .cyan
-        simulatorWarning.fontName = "Helvetica-Bold"
-        simulatorWarning.position = CGPoint(x: screenWidth/2, y: screenHeight/2 - 40)
-        addChild(simulatorWarning)
-        
-        // 7. Add zone labels
-        let zoneLabels = [
-            ("TOP SAFE (RED)", CGPoint(x: screenWidth/2, y: screenHeight - contentSafeAreaTop/2), SKColor.white),
-            ("BOTTOM SAFE (RED)", CGPoint(x: screenWidth/2, y: contentSafeAreaBottom/2), SKColor.white),
-            ("HEADER (BLUE)", CGPoint(x: screenWidth/2, y: headerY + headerHeight/2), SKColor.white),
-            ("GAME (GREEN)", CGPoint(x: screenWidth/2, y: gameAreaY + gameAreaHeight/2), SKColor.white),
-            ("BUTTONS (PURPLE)", CGPoint(x: screenWidth/2, y: buttonAreaY + buttonAreaHeight/2), SKColor.white),
-            ("FOOTER (ORANGE)", CGPoint(x: screenWidth/2, y: contentSafeAreaBottom + footerHeight/2), SKColor.white)
-        ]
-        
-        for (text, position, color) in zoneLabels {
-            let label = SKLabelNode(text: text)
-            label.fontSize = 14
-            label.fontColor = color
-            label.fontName = "Helvetica-Bold"
-            label.position = position
-            addChild(label)
-        }
-    }
-    
     func handleShakeGesture() {
         guard !isSettingsVisible else { return }
         
@@ -2233,7 +1938,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
 
     deinit {
-        handshakeAnimationTimer?.invalidate()
         selectionTimer?.invalidate()
         backgroundMusicPlayer?.stop()
     }

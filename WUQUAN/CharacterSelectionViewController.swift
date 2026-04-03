@@ -128,31 +128,42 @@ class CharacterSelectionViewController: UIViewController {
         let scene = SKScene(size: previewScene.bounds.size)
         scene.backgroundColor = SKColor(red: 0.08, green: 0.08, blue: 0.18, alpha: 1)
 
-        let charHeight = scene.size.height * 0.8
+        let spriteHeight = scene.size.height * 0.6
 
         if let pStyle = selectedPlayerStyle {
-            let pChar = CharacterNode(height: charHeight, style: pStyle, mirrored: true)
-            pChar.position = CGPoint(x: scene.size.width * 0.25, y: scene.size.height * 0.35)
-            pChar.animateIdle()
-            scene.addChild(pChar)
+            let textureName = "\(pStyle.id)_idle"
+            if let image = UIImage(named: textureName) ?? loadBundleImage(named: textureName) {
+                let texture = SKTexture(image: image)
+                let sprite = SKSpriteNode(texture: texture)
+                let aspect = texture.size().width / texture.size().height
+                sprite.size = CGSize(width: spriteHeight * aspect, height: spriteHeight)
+                sprite.position = CGPoint(x: scene.size.width * 0.25, y: scene.size.height * 0.45)
+                sprite.xScale = -abs(sprite.xScale) // mirror for player side
+                scene.addChild(sprite)
+            }
 
             let pLabel = SKLabelNode(text: pStyle.name)
             pLabel.fontSize = 12
             pLabel.fontColor = .cyan
-            pLabel.position = CGPoint(x: scene.size.width * 0.25, y: scene.size.height * 0.82)
+            pLabel.position = CGPoint(x: scene.size.width * 0.25, y: scene.size.height * 0.08)
             scene.addChild(pLabel)
         }
 
         if let oStyle = selectedOpponentStyle {
-            let oChar = CharacterNode(height: charHeight, style: oStyle)
-            oChar.position = CGPoint(x: scene.size.width * 0.75, y: scene.size.height * 0.35)
-            oChar.animateIdle()
-            scene.addChild(oChar)
+            let textureName = "\(oStyle.id)_idle"
+            if let image = UIImage(named: textureName) ?? loadBundleImage(named: textureName) {
+                let texture = SKTexture(image: image)
+                let sprite = SKSpriteNode(texture: texture)
+                let aspect = texture.size().width / texture.size().height
+                sprite.size = CGSize(width: spriteHeight * aspect, height: spriteHeight)
+                sprite.position = CGPoint(x: scene.size.width * 0.75, y: scene.size.height * 0.45)
+                scene.addChild(sprite)
+            }
 
             let oLabel = SKLabelNode(text: oStyle.name)
             oLabel.fontSize = 12
             oLabel.fontColor = .red
-            oLabel.position = CGPoint(x: scene.size.width * 0.75, y: scene.size.height * 0.82)
+            oLabel.position = CGPoint(x: scene.size.width * 0.75, y: scene.size.height * 0.08)
             scene.addChild(oLabel)
         }
 
@@ -161,11 +172,17 @@ class CharacterSelectionViewController: UIViewController {
             vsLabel.fontSize = 20
             vsLabel.fontColor = .yellow
             vsLabel.fontName = "Helvetica-Bold"
-            vsLabel.position = CGPoint(x: scene.size.width * 0.5, y: scene.size.height * 0.4)
+            vsLabel.position = CGPoint(x: scene.size.width * 0.5, y: scene.size.height * 0.45)
             scene.addChild(vsLabel)
         }
 
         previewScene.presentScene(scene)
+    }
+
+    /// Load a PNG image from the main bundle by filename (without extension)
+    private func loadBundleImage(named name: String) -> UIImage? {
+        guard let path = Bundle.main.path(forResource: name, ofType: "png") else { return nil }
+        return UIImage(contentsOfFile: path)
     }
 
     // MARK: - Actions
