@@ -50,41 +50,29 @@ class MusicStore {
         tracks.removeAll()
         
         // Try multiple approaches to find music files
-        print("DEBUG: Searching for music files...")
-        
         // Method 1: Look for Music folder
         if let musicBundle = Bundle.main.url(forResource: "Music", withExtension: nil) {
-            print("DEBUG: Found Music folder at: \(musicBundle)")
             loadMusicFromDirectory(musicBundle)
         } else {
-            print("DEBUG: No Music folder found, trying individual file search")
             
             // Method 2: Look for individual music files in main bundle
             loadMusicFromMainBundle()
         }
         
         if tracks.isEmpty {
-            print("DEBUG: No music files found, creating default tracks")
             createDefaultTracks()
         }
-        
-        print("DEBUG: MusicStore loaded \(tracks.count) tracks")
     }
     
     private func loadMusicFromDirectory(_ directory: URL) {
         do {
             let musicFiles = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            print("DEBUG: Found \(musicFiles.count) files in Music directory")
-            
+
             for fileURL in musicFiles {
-                print("DEBUG: Checking file: \(fileURL.lastPathComponent)")
                 if isValidMusicFile(fileURL) {
                     if let track = createTrack(from: fileURL) {
                         tracks.append(track)
-                        print("DEBUG: Loaded music track: \(track.displayName)")
                     }
-                } else {
-                    print("DEBUG: Skipping non-music file: \(fileURL.lastPathComponent)")
                 }
             }
         } catch {
@@ -97,11 +85,9 @@ class MusicStore {
         
         for ext in validExtensions {
             if let musicURLs = Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: "Music") {
-                print("DEBUG: Found \(musicURLs.count) .\(ext) files")
                 for fileURL in musicURLs {
                     if let track = createTrack(from: fileURL) {
                         tracks.append(track)
-                        print("DEBUG: Loaded music track: \(track.displayName)")
                     }
                 }
             }
@@ -110,13 +96,11 @@ class MusicStore {
         // Also try without subdirectory in case files are in root
         for ext in validExtensions {
             if let musicURLs = Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: nil) {
-                print("DEBUG: Found \(musicURLs.count) .\(ext) files in root bundle")
                 for fileURL in musicURLs {
                     // Only add if not already added from Music subdirectory
                     if !tracks.contains(where: { $0.url == fileURL }) {
                         if let track = createTrack(from: fileURL) {
                             tracks.append(track)
-                            print("DEBUG: Loaded music track from root: \(track.displayName)")
                         }
                     }
                 }
@@ -153,7 +137,7 @@ class MusicStore {
             let audioPlayer = try AVAudioPlayer(contentsOf: url)
             duration = audioPlayer.duration
         } catch {
-            print("WARNING: Could not get duration for \(filename): \(error)")
+            // Could not get duration, defaulting to 0
         }
         
         let id = UUID().uuidString
@@ -193,8 +177,6 @@ class MusicStore {
             
             tracks.append(track)
         }
-        
-        print("DEBUG: Created \(tracks.count) default music tracks")
     }
     
     // MARK: - Utility Methods

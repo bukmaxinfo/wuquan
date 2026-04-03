@@ -13,6 +13,7 @@ protocol SettingsViewControllerDelegate: AnyObject {
     func settingsDidUpdateVolume(volume: Float)
     func settingsDidTogglePlayback(isPlaying: Bool)
     func settingsDidStopMusic()
+    func settingsDidChangeDifficulty(difficulty: Difficulty)
     func settingsWillDismiss()
 }
 
@@ -36,7 +37,11 @@ class SettingsViewController: UIViewController {
     // Volume Section
     private var volumeTitleLabel: UILabel!
     private var volumeSlider: UISlider!
-    
+
+    // Difficulty Section
+    private var difficultyTitleLabel: UILabel!
+    private var difficultySegment: UISegmentedControl!
+
     // Music state
     private var selectedMusicURL: URL?
     private var isPlaying = false
@@ -62,6 +67,7 @@ class SettingsViewController: UIViewController {
         createTitleAndCloseButton()
         createMusicSection()
         createVolumeSection()
+        createDifficultySection()
     }
     
     private func createBackgroundView() {
@@ -157,9 +163,7 @@ class SettingsViewController: UIViewController {
         selectMusicButton.translatesAutoresizingMaskIntoConstraints = false
         selectMusicButton.isUserInteractionEnabled = true
         settingsPanel.addSubview(selectMusicButton)
-        
-        print("DEBUG: Select music button created and configured")
-        
+
         // Play/Pause button
         playPauseButton = UIButton(type: .system)
         playPauseButton.setTitle("▶️ 播放", for: .normal)
@@ -240,8 +244,40 @@ class SettingsViewController: UIViewController {
             volumeSlider.trailingAnchor.constraint(equalTo: settingsPanel.trailingAnchor, constant: -40)
         ])
     }
-    
-    
+    private func createDifficultySection() {
+        difficultyTitleLabel = UILabel()
+        difficultyTitleLabel.text = "⚔️ 难度"
+        difficultyTitleLabel.font = UIFont.boldSystemFont(ofSize: 16)
+        difficultyTitleLabel.textColor = .cyan
+        difficultyTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        settingsPanel.addSubview(difficultyTitleLabel)
+
+        let items = Difficulty.allCases.map { $0.label }
+        difficultySegment = UISegmentedControl(items: items)
+        difficultySegment.selectedSegmentIndex = UserDefaults.standard.integer(forKey: "difficulty")
+        difficultySegment.selectedSegmentTintColor = UIColor.cyan.withAlphaComponent(0.6)
+        difficultySegment.setTitleTextAttributes([.foregroundColor: UIColor.white], for: .normal)
+        difficultySegment.setTitleTextAttributes([.foregroundColor: UIColor.black], for: .selected)
+        difficultySegment.addTarget(self, action: #selector(difficultyChanged(_:)), for: .valueChanged)
+        difficultySegment.translatesAutoresizingMaskIntoConstraints = false
+        settingsPanel.addSubview(difficultySegment)
+
+        NSLayoutConstraint.activate([
+            difficultyTitleLabel.topAnchor.constraint(equalTo: volumeSlider.bottomAnchor, constant: 30),
+            difficultyTitleLabel.centerXAnchor.constraint(equalTo: settingsPanel.centerXAnchor),
+
+            difficultySegment.topAnchor.constraint(equalTo: difficultyTitleLabel.bottomAnchor, constant: 15),
+            difficultySegment.leadingAnchor.constraint(equalTo: settingsPanel.leadingAnchor, constant: 40),
+            difficultySegment.trailingAnchor.constraint(equalTo: settingsPanel.trailingAnchor, constant: -40)
+        ])
+    }
+
+    @objc private func difficultyChanged(_ sender: UISegmentedControl) {
+        guard let diff = Difficulty(rawValue: sender.selectedSegmentIndex) else { return }
+        UserDefaults.standard.set(diff.rawValue, forKey: "difficulty")
+        delegate?.settingsDidChangeDifficulty(difficulty: diff)
+    }
+
     private func animateAppearance() {
         settingsPanel.alpha = 0.0
         settingsPanel.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
@@ -273,21 +309,16 @@ class SettingsViewController: UIViewController {
     }
     
     @objc private func selectMusicTapped() {
-        print("DEBUG: Select music button tapped")
         presentCustomMusicSelection()
     }
     
     private func presentCustomMusicSelection() {
-        print("DEBUG: Presenting custom music selection")
-        
         let musicSelectionVC = MusicSelectionViewController()
         musicSelectionVC.delegate = self
         musicSelectionVC.modalPresentationStyle = .overFullScreen
         musicSelectionVC.modalTransitionStyle = .crossDissolve
         
-        present(musicSelectionVC, animated: true) {
-            print("DEBUG: Custom music selection presented successfully")
-        }
+        present(musicSelectionVC, animated: true)
     }
     
     @objc private func playPauseTapped() {
@@ -359,8 +390,6 @@ class SettingsViewController: UIViewController {
 
 extension SettingsViewController: MusicSelectionDelegate {
     func musicSelectionDidSelect(track: MusicTrack) {
-        print("DEBUG: Music track selected: \(track.title)")
-        
         selectedMusicURL = track.url
         isPlaying = true
         delegate?.settingsDidSelectMusic(url: track.url)
@@ -368,7 +397,6 @@ extension SettingsViewController: MusicSelectionDelegate {
     }
     
     func musicSelectionDidCancel() {
-        print("DEBUG: Music selection cancelled")
         // Nothing special to do on cancel
     }
 }

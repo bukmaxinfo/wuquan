@@ -9,6 +9,7 @@ import SpriteKit
 import GameplayKit
 import AVFoundation
 import MediaPlayer
+import AudioToolbox
 
 enum GamePhase {
     case handshake(step: Int)
@@ -18,9 +19,9 @@ enum GamePhase {
     case result
 }
 
-enum Gesture: CaseIterable {
+enum Gesture: CaseIterable, Equatable {
     case rock, paper, scissors
-    
+
     var emoji: String {
         switch self {
         case .rock: return "✊"
@@ -30,15 +31,67 @@ enum Gesture: CaseIterable {
     }
 }
 
-enum Direction: CaseIterable {
+enum Direction: CaseIterable, Equatable {
     case up, down, left, right
-    
+
     var emoji: String {
         switch self {
         case .up: return "⬆️"
         case .down: return "⬇️"
         case .left: return "⬅️"
         case .right: return "➡️"
+        }
+    }
+}
+
+enum RoundResult: Equatable {
+    case continueGame   // Rule followed correctly
+    case playerLoses    // Player violated the rule
+    case aiLoses        // AI violated the rule
+}
+
+enum Difficulty: Int, CaseIterable {
+    case easy = 0, medium, hard
+
+    var label: String {
+        switch self {
+        case .easy: return "简单"
+        case .medium: return "普通"
+        case .hard: return "困难"
+        }
+    }
+
+    var adaptThreshold: Int {
+        switch self {
+        case .easy: return 999   // Never adapts
+        case .medium: return 3
+        case .hard: return 2
+        }
+    }
+
+    var counterWeight: Double {
+        switch self {
+        case .easy: return 0.35
+        case .medium: return 0.5
+        case .hard: return 0.7
+        }
+    }
+}
+
+struct GameRules {
+    static func evaluateRound(playerGesture: Gesture, aiGesture: Gesture,
+                              playerDirection: Direction, aiDirection: Direction) -> RoundResult {
+        let sameGesture = playerGesture == aiGesture
+        let sameDirection = playerDirection == aiDirection
+
+        if sameGesture && sameDirection {
+            return .continueGame
+        } else if !sameGesture && !sameDirection {
+            return .continueGame
+        } else if sameGesture && !sameDirection {
+            return .playerLoses
+        } else {
+            return .aiLoses
         }
     }
 }
@@ -71,7 +124,22 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var playerDirection: Direction?
     private var aiDirection: Direction?
     private var handshakeAnimationTimer: Timer?
-    private var gameScore = (player: 0, ai: 0)
+    private var playerGestureHistory: [Gesture] = []
+    private var difficulty: Difficulty = Difficulty(rawValue: UserDefaults.standard.integer(forKey: "difficulty")) ?? .medium
+    private var roundCount = 0
+    private let maxRounds = 10
+    private var totalGamesPlayed: Int {
+        get { UserDefaults.standard.integer(forKey: "totalGamesPlayed") }
+        set { UserDefaults.standard.set(newValue, forKey: "totalGamesPlayed") }
+    }
+    private var totalWins: Int {
+        get { UserDefaults.standard.integer(forKey: "totalWins") }
+        set { UserDefaults.standard.set(newValue, forKey: "totalWins") }
+    }
+    private var gameScore: (player: Int, ai: Int) = (
+        player: UserDefaults.standard.integer(forKey: "playerScore"),
+        ai: UserDefaults.standard.integer(forKey: "aiScore")
+    )
     
     // Music System
     private var backgroundMusicPlayer: AVAudioPlayer?
@@ -92,11 +160,65 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     override func didMove(to view: SKView) {
-        // This is called when the scene is presented to a view
-        // Now we have access to the actual view and its safe area
         setupUI()
         setupAutoMusic()
-        startHandshakePhase()
+
+        if !UserDefaults.standard.bool(forKey: "hasSeenTutorial") {
+            showTutorial()
+        } else {
+            startHandshakePhase()
+        }
+    }
+
+    private func showTutorial() {
+        let overlay = SKShapeNode(rect: CGRect(origin: .zero, size: size))
+        overlay.fillColor = SKColor(red: 0.05, green: 0.05, blue: 0.15, alpha: 0.9)
+        overlay.zPosition = 100
+        overlay.name = "tutorialOverlay"
+        addChild(overlay)
+
+        let lines = [
+            "欢迎来到舞拳！",
+            "",
+            "🤝 先与对手握手热身",
+            "✊✋✌️ 选择石头、布或剪刀",
+            "⬆️⬇️⬅️➡️ 然后选择方向",
+            "",
+            "规则：",
+            "手势相同 → 方向必须相同",
+            "手势不同 → 方向必须不同",
+            "",
+            "📱 摇动手机可快速随机选择！",
+            "",
+            "点击任意位置开始"
+        ]
+
+        let text = lines.joined(separator: "\n")
+        let tutorialLabel = SKLabelNode()
+        tutorialLabel.text = text
+        tutorialLabel.numberOfLines = 0
+        tutorialLabel.fontSize = min(size.width, size.height) * 0.035
+        tutorialLabel.fontColor = .white
+        tutorialLabel.preferredMaxLayoutWidth = size.width * 0.8
+        tutorialLabel.horizontalAlignmentMode = .center
+        tutorialLabel.verticalAlignmentMode = .center
+        tutorialLabel.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        tutorialLabel.zPosition = 101
+        tutorialLabel.name = "tutorialOverlay"
+        addChild(tutorialLabel)
+    }
+
+    private func dismissTutorial() {
+        UserDefaults.standard.set(true, forKey: "hasSeenTutorial")
+        children.filter { $0.name == "tutorialOverlay" }.forEach { node in
+            node.run(SKAction.sequence([
+                SKAction.fadeOut(withDuration: 0.3),
+                SKAction.removeFromParent()
+            ]))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.startHandshakePhase()
+        }
     }
     
     private func setupUI() {
@@ -502,8 +624,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         
         // Pause any ongoing animations
         pauseGameAnimations()
-        
-        print("DEBUG: Game paused for settings")
     }
     
     private func resumeGameFromSettings() {
@@ -512,8 +632,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         
         // Resume game animations
         resumeGameAnimations()
-        
-        print("DEBUG: Game resumed from settings")
     }
     
     private func hideGameButtons() {
@@ -546,10 +664,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             buttonArea.alpha = 0.3
             hiddenGameButtons.append(buttonArea)
         }
-        
-        print("DEBUG: Hidden \(hiddenGameButtons.count) game buttons/elements")
     }
-    
+
     private func showGameButtons() {
         // Restore all hidden game buttons
         for button in hiddenGameButtons {
@@ -568,9 +684,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         }
         
         hiddenGameButtons.removeAll()
-        print("DEBUG: Restored all game buttons/elements")
     }
-    
+
     private func pauseGameAnimations() {
         // Pause hand animations
         playerHandNode?.removeAllActions()
@@ -633,24 +748,16 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         if selectedMusicURL == nil {
             let availableTracks = MusicStore.shared.getAllTracks()
             if let firstTrack = availableTracks.first {
-                print("DEBUG: Auto-selecting first music track: \(firstTrack.displayName)")
                 selectedMusicURL = firstTrack.url
-                
+
                 // Auto-start playing if the file actually exists
                 if FileManager.default.fileExists(atPath: firstTrack.url.path) {
                     playBackgroundMusic()
-                    print("DEBUG: Auto-started background music: \(firstTrack.title)")
-                } else {
-                    print("DEBUG: Music file not found, will show in UI but won't play: \(firstTrack.filename)")
                 }
-                
+
                 // Update music button to show current status
                 updateMusicStatusIndicator()
-            } else {
-                print("DEBUG: No music tracks available for auto-selection")
             }
-        } else {
-            print("DEBUG: Music already selected, not auto-selecting")
         }
     }
     
@@ -894,8 +1001,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             return
         }
         
-        print("DEBUG: Presenting music picker from view controller: \(presentingVC)")
-        
         // Check if the presenting view controller can present
         if presentingVC.presentedViewController != nil {
             print("ERROR: Presenting view controller already has a presented view controller")
@@ -908,10 +1013,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         mediaPicker.prompt = "选择背景音乐"
         mediaPicker.modalPresentationStyle = .formSheet
         
-        print("DEBUG: About to present media picker")
-        presentingVC.present(mediaPicker, animated: true) {
-            print("DEBUG: Media picker presentation completed successfully")
-        }
+        presentingVC.present(mediaPicker, animated: true)
     }
     
     private func playBackgroundMusic() {
@@ -983,7 +1085,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     
     private func completeHandshakeStep() {
         guard case .handshake(let step) = gamePhase else { return }
-        
+        playHandshakeSound()
+
         if step < 4 {
             gamePhase = .handshake(step: step + 1)
             phaseLabel?.text = "握手阶段 (\(step + 1)/4)"
@@ -1113,7 +1216,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func selectGesture(_ gesture: Gesture) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        playSelectSound()
         playerGesture = gesture
+        playerGestureHistory.append(gesture)
         playerGestureLabel?.text = gesture.emoji
         aiGestureLabel?.text = aiGesture?.emoji ?? ""
         
@@ -1131,11 +1237,17 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         let location = touch.location(in: self)
         let touchedNode = atPoint(location)
         
+        // Dismiss tutorial on any tap
+        if childNode(withName: "tutorialOverlay") != nil {
+            dismissTutorial()
+            return
+        }
+
         // Skip game interactions if settings are visible
         if isSettingsVisible {
             return
         }
-        
+
         // Handle settings button tap
         if touchedNode.name == "settingsButton" {
             presentSettingsViewController()
@@ -1153,7 +1265,13 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             presentSettingsViewController()
             return
         }
-        
+
+        // Handle restart button tap
+        if touchedNode.name == "restartButton" {
+            resetFullGame()
+            return
+        }
+
         if case .gestureSelection = gamePhase,
            let nodeName = touchedNode.name,
            nodeName.hasPrefix("gesture_") {
@@ -1197,18 +1315,37 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func startDirectionPointingPhase() {
         gamePhase = .directionPointing
         phaseLabel?.text = "指向选择"
-        
-        // Determine AI direction based on rules
+
+        // AI chooses direction strategically based on gesture match state
         let sameGesture = playerGesture == aiGesture
         if sameGesture {
             instructionLabel?.text = "手势相同，选择相同方向"
-            aiDirection = Direction.allCases.randomElement()
+            // Same gesture: AI wants to match player's direction
+            // Favor up/right as humans tend to pick these more often
+            aiDirection = chooseAIDirection(favoredDirections: [.up, .right])
         } else {
             instructionLabel?.text = "手势不同，选择不同方向"
+            // Different gesture: AI wants to differ from player's direction
+            // Spread evenly since we want to avoid matching
             aiDirection = Direction.allCases.randomElement()
         }
-        
+
         showDirectionButtons()
+    }
+
+    private func chooseAIDirection(favoredDirections: [Direction]) -> Direction {
+        let allDirections = Direction.allCases
+        let random = Double.random(in: 0...1)
+        var cumulative = 0.0
+
+        for direction in allDirections {
+            let weight = favoredDirections.contains(direction) ? 0.35 : 0.15
+            cumulative += weight
+            if random <= cumulative {
+                return direction
+            }
+        }
+        return allDirections.randomElement() ?? .up
     }
     
     private func showDirectionButtons() {
@@ -1248,6 +1385,8 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func selectDirection(_ direction: Direction) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        playSelectSound()
         playerDirection = direction
         
         // Remove direction buttons
@@ -1263,47 +1402,93 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
               let aiDirection = aiDirection else { return }
         
         gamePhase = .result
-        
-        let sameGesture = playerGesture == aiGesture
-        let sameDirection = playerDirection == aiDirection
-        
+
+        let result = GameRules.evaluateRound(
+            playerGesture: playerGesture, aiGesture: aiGesture,
+            playerDirection: playerDirection, aiDirection: aiDirection)
+
         var resultText: String
         var winner: String
-        
-        // Enhanced win/loss detection with visual feedback
-        if sameGesture && sameDirection {
-            resultText = "正确! 手势相同，方向相同"
+
+        switch result {
+        case .continueGame:
+            let sameGesture = playerGesture == aiGesture
+            resultText = sameGesture ? "正确! 手势相同，方向相同" : "正确! 手势不同，方向不同"
             winner = "继续游戏"
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            playSuccessSound()
             showSuccessEffect()
-        } else if !sameGesture && !sameDirection {
-            resultText = "正确! 手势不同，方向不同"
-            winner = "继续游戏"
-            showSuccessEffect()
-        } else {
+        case .playerLoses:
             resultText = "错误! 违反规则"
-            if sameGesture && !sameDirection {
-                winner = "玩家失败 😢"
-                gameScore.ai += 1
-                showFailureEffect()
-            } else {
-                winner = "夜店小王子失败 🎉"
-                gameScore.player += 1
-                showVictoryEffect()
-            }
+            winner = "玩家失败 😢"
+            gameScore.ai += 1
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            playFailureSound()
+            showFailureEffect()
+        case .aiLoses:
+            resultText = "错误! 违反规则"
+            winner = "夜店小王子失败 🎉"
+            gameScore.player += 1
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            playSuccessSound()
+            showVictoryEffect()
         }
         
+        roundCount += 1
         phaseLabel?.text = winner
         instructionLabel?.text = resultText
         updateScoreDisplay()
-        
-        // Reset for next round
-        let nextRoundAction = SKAction.sequence([
-            SKAction.wait(forDuration: 3.0),
-            SKAction.run { self.resetGame() }
-        ])
-        self.run(nextRoundAction, withKey: "nextRoundDelay")
+
+        if roundCount >= maxRounds {
+            let gameOverAction = SKAction.sequence([
+                SKAction.wait(forDuration: 3.0),
+                SKAction.run { self.showGameOver() }
+            ])
+            self.run(gameOverAction, withKey: "nextRoundDelay")
+        } else {
+            let nextRoundAction = SKAction.sequence([
+                SKAction.wait(forDuration: 3.0),
+                SKAction.run { self.resetGame() }
+            ])
+            self.run(nextRoundAction, withKey: "nextRoundDelay")
+        }
     }
-    
+
+    private func showGameOver() {
+        gamePhase = .result
+        let playerWon = gameScore.player > gameScore.ai
+        let tied = gameScore.player == gameScore.ai
+
+        totalGamesPlayed += 1
+        if playerWon { totalWins += 1 }
+
+        if tied {
+            phaseLabel?.text = "平局！"
+            instructionLabel?.text = "比分 \(gameScore.player) : \(gameScore.ai) — 再来一局？"
+        } else if playerWon {
+            phaseLabel?.text = "你赢了！🏆"
+            instructionLabel?.text = "最终比分 \(gameScore.player) : \(gameScore.ai)"
+            showVictoryEffect()
+        } else {
+            phaseLabel?.text = "夜店小王子获胜！"
+            instructionLabel?.text = "最终比分 \(gameScore.player) : \(gameScore.ai)"
+            showFailureEffect()
+        }
+
+        let restartLabel = SKLabelNode(text: "点击重新开始")
+        restartLabel.fontSize = min(size.width, size.height) * 0.04
+        restartLabel.fontColor = .cyan
+        restartLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.15)
+        restartLabel.name = "restartButton"
+        addChild(restartLabel)
+
+        let pulse = SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.4, duration: 0.8),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.8)
+        ])
+        restartLabel.run(SKAction.repeatForever(pulse))
+    }
+
     private func resetGame() {
         playerGesture = nil
         aiGesture = nil
@@ -1311,14 +1496,25 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         aiDirection = nil
         playerGestureLabel?.text = ""
         aiGestureLabel?.text = ""
-        
+
         startHandshakePhase()
     }
-    
+
+    private func resetFullGame() {
+        roundCount = 0
+        gameScore = (player: 0, ai: 0)
+        playerGestureHistory.removeAll()
+        updateScoreDisplay()
+        childNode(withName: "restartButton")?.removeFromParent()
+        resetGame()
+    }
+
     private func updateScoreDisplay() {
         if let scoreLabel = childNode(withName: "scoreLabel") as? SKLabelNode {
-            scoreLabel.text = "玩家 \(gameScore.player) : \(gameScore.ai) 夜店小王子"
+            scoreLabel.text = "玩家 \(gameScore.player) : \(gameScore.ai) 夜店小王子  (\(roundCount)/\(maxRounds))"
         }
+        UserDefaults.standard.set(gameScore.player, forKey: "playerScore")
+        UserDefaults.standard.set(gameScore.ai, forKey: "aiScore")
     }
     
     override func update(_ currentTime: TimeInterval) {
@@ -1336,30 +1532,65 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func chooseAIGesture() -> Gesture {
-        // 夜店小王子的策略：聪明而狡猾的选择模式
-        let allGestures = Gesture.allCases
-        
-        // 夜店小王子具有基本策略：倾向于对抗常见的人类模式
-        // 人类通常首选石头，所以夜店小王子稍微偏爱布
-        let weights: [Gesture: Double] = [
-            .rock: 0.3,
-            .paper: 0.4,  // Slightly higher chance to counter rock
-            .scissors: 0.3
-        ]
-        
+        // 夜店小王子的策略：分析玩家历史模式并做出反制
+        let recentHistory = playerGestureHistory.suffix(5)
+
+        // Need enough history to adapt (depends on difficulty)
+        guard recentHistory.count >= difficulty.adaptThreshold else {
+            // Default weights: favor paper to counter common rock
+            return weightedRandomGesture(weights: [.rock: 0.3, .paper: 0.4, .scissors: 0.3])
+        }
+
+        // Count player's recent gesture frequencies
+        var counts: [Gesture: Int] = [.rock: 0, .paper: 0, .scissors: 0]
+        for g in recentHistory { counts[g, default: 0] += 1 }
+
+        // Find most frequent gesture and counter it
+        let mostFrequent = counts.max(by: { $0.value < $1.value })?.key ?? .rock
+        let counter: Gesture
+        switch mostFrequent {
+        case .rock: counter = .paper
+        case .paper: counter = .scissors
+        case .scissors: counter = .rock
+        }
+
+        // Counter weight depends on difficulty
+        let remaining = (1.0 - difficulty.counterWeight) / 2.0
+        var weights: [Gesture: Double] = [.rock: remaining, .paper: remaining, .scissors: remaining]
+        weights[counter] = difficulty.counterWeight
+        return weightedRandomGesture(weights: weights)
+    }
+
+    private func weightedRandomGesture(weights: [Gesture: Double]) -> Gesture {
         let random = Double.random(in: 0...1)
         var cumulative = 0.0
-        
-        for gesture in allGestures {
+        for gesture in Gesture.allCases {
             cumulative += weights[gesture] ?? 0.33
             if random <= cumulative {
                 return gesture
             }
         }
-        
-        return .rock // Fallback
+        return .rock
     }
-    
+
+    // MARK: - Sound Effects
+
+    private func playSelectSound() {
+        AudioServicesPlaySystemSound(1104) // Key press tick
+    }
+
+    private func playSuccessSound() {
+        AudioServicesPlaySystemSound(1025) // Positive tone
+    }
+
+    private func playFailureSound() {
+        AudioServicesPlaySystemSound(1073) // Negative tone
+    }
+
+    private func playHandshakeSound() {
+        AudioServicesPlaySystemSound(1100) // Short tap
+    }
+
     private func showSuccessEffect() {
         // Create sparkle effect for correct moves
         let sparkleCount = 20
@@ -1495,12 +1726,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         if let view = self.view {
             let rawSafeAreaTop = view.safeAreaInsets.top
             let rawSafeAreaBottom = view.safeAreaInsets.bottom
-            
-            print("DEBUG: Scene size - width: \(screenWidth), height: \(screenHeight)")
-            print("DEBUG: View bounds - \(view.bounds)")
-            print("DEBUG: View frame - \(view.frame)")
-            print("DEBUG: Raw safe area insets - top: \(rawSafeAreaTop), bottom: \(rawSafeAreaBottom)")
-            
+
             // Handle case where safe area is 0 (common in simulator or older devices)
             if rawSafeAreaTop == 0 && rawSafeAreaBottom == 0 {
                 // Use device-specific fallbacks based on screen size
@@ -1514,11 +1740,9 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
                     safeAreaTop = 20  // Status bar
                     safeAreaBottom = 0
                 }
-                print("DEBUG: Using fallback safe areas - top: \(safeAreaTop), bottom: \(safeAreaBottom)")
             } else {
                 safeAreaTop = rawSafeAreaTop
                 safeAreaBottom = rawSafeAreaBottom
-                print("DEBUG: Using real safe areas - top: \(safeAreaTop), bottom: \(safeAreaBottom)")
             }
         }
         
@@ -1563,7 +1787,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         safeTopOverlay.lineWidth = 5
         safeTopOverlay.position = CGPoint.zero
         addChild(safeTopOverlay)
-        print("DEBUG: Top safe area overlay - rect: (0, \(screenHeight - contentSafeAreaTop), \(screenWidth), \(contentSafeAreaTop))")
         
         // Bottom safe area (RED) - should appear at the very bottom
         let safeBottomOverlay = SKShapeNode(rect: CGRect(x: 0, y: 0, width: screenWidth, height: contentSafeAreaBottom))
@@ -1573,7 +1796,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         safeBottomOverlay.lineWidth = 5
         safeBottomOverlay.position = CGPoint.zero
         addChild(safeBottomOverlay)
-        print("DEBUG: Bottom safe area overlay - rect: (0, 0, \(screenWidth), \(contentSafeAreaBottom))")
         
         // 4. Layout zones with different colors
         let headerHeight = screenHeight * 0.15
@@ -1682,8 +1904,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     func handleShakeGesture() {
         guard !isSettingsVisible else { return }
         
-        print("DEBUG: GameScene received shake gesture, current phase: \(gamePhase)")
-        
         switch gamePhase {
         case .handshake:
             handleShakeInHandshakePhase()
@@ -1699,8 +1919,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func handleShakeInHandshakePhase() {
-        print("DEBUG: Shake during handshake phase - adding intensity")
-        
         // Add extra visual effects to the handshake
         createShakeSparkles(at: playerHandNode?.position ?? CGPoint.zero)
         createShakeSparkles(at: aiHandNode?.position ?? CGPoint.zero)
@@ -1718,8 +1936,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func handleShakeInFreeMovementPhase() {
-        print("DEBUG: Shake during free movement phase - enhancing movement")
-        
         // Create enhanced movement effects
         createShakeSparkles(at: playerHandNode?.position ?? CGPoint.zero)
         
@@ -1746,8 +1962,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func handleShakeInGestureSelectionPhase() {
-        print("DEBUG: Shake during gesture selection - quick random selection")
-        
         // Randomly select a gesture when shaken
         let randomGesture = Gesture.allCases.randomElement() ?? .rock
         selectGesture(randomGesture)
@@ -1760,8 +1974,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func handleShakeInDirectionPointingPhase() {
-        print("DEBUG: Shake during direction pointing - quick random selection")
-        
         // Randomly select a direction when shaken
         let randomDirection = Direction.allCases.randomElement() ?? .up
         selectDirection(randomDirection)
@@ -1774,8 +1986,6 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func handleShakeInResultPhase() {
-        print("DEBUG: Shake during result phase - skip to next round")
-        
         // Skip the waiting period and immediately start next round
         removeAction(forKey: "nextRoundDelay")
         
@@ -1915,7 +2125,11 @@ extension GameScene {
         stopBackgroundMusic()
         selectedMusicURL = nil
     }
-    
+
+    func settingsDidChangeDifficulty(difficulty: Difficulty) {
+        self.difficulty = difficulty
+    }
+
     func settingsWillDismiss() {
         isSettingsVisible = false
         resumeGameFromSettings()
@@ -1935,7 +2149,6 @@ extension GameScene: MPMediaPickerControllerDelegate {
         
         guard let mediaItem = mediaItemCollection.items.first,
               let assetURL = mediaItem.assetURL else {
-            print("No valid media item selected")
             return
         }
         

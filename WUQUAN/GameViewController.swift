@@ -40,8 +40,8 @@ class GameViewController: UIViewController {
             
             view.ignoresSiblingOrder = true
             
-            view.showsFPS = true
-            view.showsNodeCount = true
+            view.showsFPS = false
+            view.showsNodeCount = false
         }
         
         // Setup motion detection
@@ -79,7 +79,6 @@ class GameViewController: UIViewController {
     
     private func setupMotionDetection() {
         guard motionManager.isAccelerometerAvailable else {
-            print("DEBUG: Accelerometer not available")
             return
         }
         
@@ -99,13 +98,9 @@ class GameViewController: UIViewController {
                 self.handleShakeGesture()
             }
         }
-        
-        print("DEBUG: Motion detection setup completed")
     }
     
     private func handleShakeGesture() {
-        print("DEBUG: Shake detected!")
-        
         // Provide haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
         impactFeedback.impactOccurred()

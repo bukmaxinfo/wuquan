@@ -191,7 +191,6 @@ class MusicSelectionViewController: UIViewController {
     }
     
     @objc private func refreshButtonTapped() {
-        print("DEBUG: Refreshing music library...")
         MusicStore.shared.refreshMusicLibrary()
         loadMusic()
         
@@ -307,7 +306,6 @@ extension MusicSelectionViewController: UITableViewDelegate {
             dismiss(animated: true)
         } else {
             // File doesn't exist, show preview or error
-            print("DEBUG: Music file not found, showing preview only")
             playPreview(for: track, at: indexPath)
         }
     }
