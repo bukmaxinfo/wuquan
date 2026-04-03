@@ -234,11 +234,16 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func setupUI() {
-        backgroundColor = SKColor(red: 0.1, green: 0.1, blue: 0.2, alpha: 1.0)
-        
+        backgroundColor = SKColor(red: 0.05, green: 0.02, blue: 0.1, alpha: 1.0)
+
+        // Neon grid floor background
+        let neonFloor = NeonFloorNode(size: size)
+        neonFloor.zPosition = -10
+        addChild(neonFloor)
+
         // Create dynamic safe area visualization
         createSafeAreaVisualization()
-        
+
         setupAudioSession()
     }
     
@@ -327,55 +332,60 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func createGameHeader(in headerZone: CGRect) {
         let centerX = headerZone.midX
         let centerY = headerZone.midY
-        
-        // Game title (interactive - tap to show rules)
-        let titleLabel = SKLabelNode(text: "舞拳")
-        titleLabel.fontSize = min(headerZone.width, headerZone.height) * 0.3
-        titleLabel.fontColor = .white
+
+        // Game title — neon "DANCE FIST" style
+        let titleLabel = SKLabelNode(text: "DANCE FIST")
+        titleLabel.fontSize = min(headerZone.width, headerZone.height) * 0.28
+        titleLabel.fontColor = SKColor(red: 1.0, green: 0.0, blue: 0.8, alpha: 1.0)
         titleLabel.fontName = "Helvetica-Bold"
-        titleLabel.position = CGPoint(x: centerX, y: centerY + headerZone.height * 0.15)
+        titleLabel.position = CGPoint(x: centerX, y: centerY + headerZone.height * 0.2)
         titleLabel.name = "gameTitle"
-        
-        // Add subtle glow effect to indicate interactivity
-        let glowEffect = SKLabelNode(text: "舞拳")
+        addChild(titleLabel)
+
+        // Neon glow behind title
+        let glowEffect = SKLabelNode(text: "DANCE FIST")
         glowEffect.fontSize = titleLabel.fontSize
-        glowEffect.fontColor = UIColor.yellow.withAlphaComponent(0.3)
+        glowEffect.fontColor = SKColor(red: 1.0, green: 0.0, blue: 0.8, alpha: 0.25)
         glowEffect.fontName = "Helvetica-Bold"
         glowEffect.position = titleLabel.position
         glowEffect.zPosition = titleLabel.zPosition - 1
         addChild(glowEffect)
-        
-        // Add pulsing animation to the glow
+
         let pulseAction = SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.1, duration: 1.5),
-            SKAction.fadeAlpha(to: 0.4, duration: 1.5)
+            SKAction.fadeAlpha(to: 0.1, duration: 1.2),
+            SKAction.fadeAlpha(to: 0.35, duration: 1.2)
         ])
-        let repeatPulse = SKAction.repeatForever(pulseAction)
-        glowEffect.run(repeatPulse)
-        
-        addChild(titleLabel)
-        
+        glowEffect.run(SKAction.repeatForever(pulseAction))
+
+        // Subtitle — 舞拳
+        let subTitle = SKLabelNode(text: "舞 拳")
+        subTitle.fontSize = min(headerZone.width, headerZone.height) * 0.12
+        subTitle.fontColor = SKColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.7)
+        subTitle.position = CGPoint(x: centerX, y: centerY + headerZone.height * 0.02)
+        addChild(subTitle)
+
         // Phase indicator
         phaseLabel = SKLabelNode(text: "握手阶段")
-        phaseLabel?.fontSize = min(headerZone.width, headerZone.height) * 0.15
+        phaseLabel?.fontSize = min(headerZone.width, headerZone.height) * 0.14
         phaseLabel?.fontColor = .yellow
-        phaseLabel?.position = CGPoint(x: centerX, y: centerY - headerZone.height * 0.1)
+        phaseLabel?.position = CGPoint(x: centerX, y: centerY - headerZone.height * 0.15)
         addChild(phaseLabel!)
-        
-        // Score background
-        let scoreSize = CGSize(width: headerZone.width * 0.4, height: headerZone.height * 0.25)
-        let scoreBackground = SKShapeNode(rectOf: scoreSize, cornerRadius: scoreSize.height * 0.3)
-        scoreBackground.fillColor = SKColor(white: 0.2, alpha: 0.8)
-        scoreBackground.strokeColor = .gray
-        scoreBackground.lineWidth = 1
-        scoreBackground.position = CGPoint(x: centerX, y: centerY - headerZone.height * 0.35)
+
+        // Score bar — neon styled
+        let scoreBarWidth = headerZone.width * 0.55
+        let scoreBarHeight = headerZone.height * 0.2
+        let scoreBackground = SKShapeNode(rectOf: CGSize(width: scoreBarWidth, height: scoreBarHeight), cornerRadius: scoreBarHeight * 0.4)
+        scoreBackground.fillColor = SKColor(red: 0.1, green: 0.05, blue: 0.15, alpha: 0.8)
+        scoreBackground.strokeColor = SKColor(red: 0.0, green: 0.8, blue: 1.0, alpha: 0.5)
+        scoreBackground.lineWidth = 1.5
+        scoreBackground.glowWidth = 2
+        scoreBackground.position = CGPoint(x: centerX, y: centerY - headerZone.height * 0.38)
         addChild(scoreBackground)
-        
-        // Score label
+
         let scoreLabel = SKLabelNode(text: "玩家 0 : 0 对手")
-        scoreLabel.fontSize = min(headerZone.width, headerZone.height) * 0.12
+        scoreLabel.fontSize = min(headerZone.width, headerZone.height) * 0.1
         scoreLabel.fontColor = .white
-        scoreLabel.position = CGPoint(x: centerX, y: centerY - headerZone.height * 0.4)
+        scoreLabel.position = CGPoint(x: centerX, y: centerY - headerZone.height * 0.42)
         scoreLabel.name = "scoreLabel"
         addChild(scoreLabel)
     }
@@ -383,88 +393,82 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func createGameArena(in gameZone: CGRect) {
         let centerX = gameZone.midX
         let centerY = gameZone.midY
-        
-        // Player area (left side)
-        let areaWidth = gameZone.width * 0.35
-        let areaHeight = gameZone.height * 0.8
-        let playerX = gameZone.minX + gameZone.width * 0.2
-        let aiX = gameZone.maxX - gameZone.width * 0.2
-        
-        // Player area background
-        let playerArea = SKShapeNode(rectOf: CGSize(width: areaWidth, height: areaHeight), cornerRadius: areaWidth * 0.1)
-        playerArea.fillColor = SKColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 0.3)
-        playerArea.strokeColor = .cyan
-        playerArea.lineWidth = 2
-        playerArea.position = CGPoint(x: playerX, y: centerY)
-        addChild(playerArea)
+        let charHeight = gameZone.height * 0.85
 
-        // Player label
-        let playerLabel = SKLabelNode(text: "你")
-        playerLabel.fontSize = areaWidth * 0.2
-        playerLabel.fontColor = .cyan
+        // Positions — characters spread apart in open arena
+        let playerX = gameZone.minX + gameZone.width * 0.25
+        let aiX = gameZone.maxX - gameZone.width * 0.25
+
+        // Player name tag — neon cyan
+        let playerLabel = SKLabelNode(text: "Player 1")
+        playerLabel.fontSize = 14
+        playerLabel.fontColor = SKColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 0.9)
         playerLabel.fontName = "Helvetica-Bold"
-        playerLabel.position = CGPoint(x: playerX, y: centerY + areaHeight * 0.4)
+        playerLabel.position = CGPoint(x: playerX, y: centerY + charHeight * 0.55)
         addChild(playerLabel)
 
         // Player animated character (mirrored to face AI)
-        let pChar = CharacterNode(height: areaHeight * 0.7, style: playerStyle, mirrored: true)
-        pChar.position = CGPoint(x: playerX, y: centerY - areaHeight * 0.05)
+        let pChar = CharacterNode(height: charHeight, style: playerStyle, mirrored: true)
+        pChar.position = CGPoint(x: playerX, y: centerY - charHeight * 0.1)
         addChild(pChar)
         playerCharacter = pChar
         pChar.animateIdle()
 
-        // Player gesture display (below character)
+        // Player gesture display
         playerGestureLabel = SKLabelNode(text: "")
-        playerGestureLabel?.fontSize = areaWidth * 0.3
-        playerGestureLabel?.position = CGPoint(x: playerX, y: centerY - areaHeight * 0.4)
+        playerGestureLabel?.fontSize = 28
+        playerGestureLabel?.position = CGPoint(x: playerX, y: centerY - charHeight * 0.5)
         addChild(playerGestureLabel!)
-        
-        // VS label in center
-        let vsLabel = SKLabelNode(text: "VS")
-        vsLabel.fontSize = gameZone.width * 0.08
-        vsLabel.fontColor = .white
-        vsLabel.fontName = "Helvetica-Bold"
-        vsLabel.position = CGPoint(x: centerX, y: centerY)
-        addChild(vsLabel)
-        
-        // AI area background
-        let aiArea = SKShapeNode(rectOf: CGSize(width: areaWidth, height: areaHeight), cornerRadius: areaWidth * 0.1)
-        aiArea.fillColor = SKColor(red: 0.6, green: 0.2, blue: 0.2, alpha: 0.3)
-        aiArea.strokeColor = .red
-        aiArea.lineWidth = 2
-        aiArea.position = CGPoint(x: aiX, y: centerY)
-        addChild(aiArea)
 
-        // AI label
+        // VS label — neon styled
+        let vsLabel = SKLabelNode(text: "VS")
+        vsLabel.fontSize = gameZone.width * 0.07
+        vsLabel.fontColor = SKColor(red: 1.0, green: 1.0, blue: 0.0, alpha: 0.9)
+        vsLabel.fontName = "Helvetica-Bold"
+        vsLabel.position = CGPoint(x: centerX, y: centerY + charHeight * 0.1)
+        addChild(vsLabel)
+
+        // VS glow
+        let vsGlow = SKLabelNode(text: "VS")
+        vsGlow.fontSize = vsLabel.fontSize
+        vsGlow.fontColor = SKColor(red: 1.0, green: 1.0, blue: 0.0, alpha: 0.2)
+        vsGlow.fontName = "Helvetica-Bold"
+        vsGlow.position = vsLabel.position
+        vsGlow.zPosition = vsLabel.zPosition - 1
+        addChild(vsGlow)
+        vsGlow.run(SKAction.repeatForever(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.1, duration: 0.8),
+            SKAction.fadeAlpha(to: 0.3, duration: 0.8)
+        ])))
+
+        // Opponent name tag — neon red/magenta
         let aiLabel = SKLabelNode(text: opponentStyle.name)
-        aiLabel.fontSize = areaWidth * 0.2
-        aiLabel.fontColor = .red
+        aiLabel.fontSize = 14
+        aiLabel.fontColor = SKColor(red: 1.0, green: 0.2, blue: 0.5, alpha: 0.9)
         aiLabel.fontName = "Helvetica-Bold"
-        aiLabel.position = CGPoint(x: aiX, y: centerY + areaHeight * 0.4)
+        aiLabel.position = CGPoint(x: aiX, y: centerY + charHeight * 0.55)
         addChild(aiLabel)
 
         // AI animated character
-        let character = CharacterNode(height: areaHeight * 0.7, style: opponentStyle)
-        character.position = CGPoint(x: aiX, y: centerY - areaHeight * 0.05)
+        let character = CharacterNode(height: charHeight, style: opponentStyle)
+        character.position = CGPoint(x: aiX, y: centerY - charHeight * 0.1)
         addChild(character)
         characterNode = character
         character.animateIdle()
 
-        // AI gesture display (positioned below character)
+        // AI gesture display
         aiGestureLabel = SKLabelNode(text: "")
-        aiGestureLabel?.fontSize = areaWidth * 0.3
-        aiGestureLabel?.position = CGPoint(x: aiX, y: centerY - areaHeight * 0.4)
+        aiGestureLabel?.fontSize = 28
+        aiGestureLabel?.position = CGPoint(x: aiX, y: centerY - charHeight * 0.5)
         addChild(aiGestureLabel!)
 
-        // Hidden hand nodes (kept for compatibility with shake handlers)
-        let handRadius = min(areaWidth, areaHeight) * 0.08
-
-        playerHandNode = SKShapeNode(circleOfRadius: handRadius)
+        // Hidden hand nodes (compatibility with shake handlers)
+        playerHandNode = SKShapeNode(circleOfRadius: 1)
         playerHandNode?.position = CGPoint(x: playerX, y: centerY)
         playerHandNode?.isHidden = true
         addChild(playerHandNode!)
 
-        aiHandNode = SKShapeNode(circleOfRadius: handRadius)
+        aiHandNode = SKShapeNode(circleOfRadius: 1)
         aiHandNode?.position = CGPoint(x: aiX, y: centerY)
         aiHandNode?.isHidden = true
         addChild(aiHandNode!)
@@ -473,39 +477,24 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func createControlArea(in controlZone: CGRect) {
         let centerX = controlZone.midX
         let centerY = controlZone.midY
-        
-        // Instructions background
-        let instructionWidth = controlZone.width * 0.9
-        let instructionHeight = controlZone.height * 0.4
-        let instructionBackground = SKShapeNode(rectOf: CGSize(width: instructionWidth, height: instructionHeight), cornerRadius: instructionHeight * 0.2)
-        instructionBackground.fillColor = SKColor(white: 0.1, alpha: 0.8)
-        instructionBackground.strokeColor = .gray
-        instructionBackground.lineWidth = 1
-        instructionBackground.position = CGPoint(x: centerX, y: centerY + controlZone.height * 0.15)
-        addChild(instructionBackground)
-        
-        // Instruction label
+
+        // Instruction bar — neon styled
+        let instructionWidth = controlZone.width * 0.85
+        let instructionHeight = controlZone.height * 0.3
+        let instructionBg = SKShapeNode(rectOf: CGSize(width: instructionWidth, height: instructionHeight), cornerRadius: instructionHeight * 0.3)
+        instructionBg.fillColor = SKColor(red: 0.08, green: 0.03, blue: 0.12, alpha: 0.85)
+        instructionBg.strokeColor = SKColor(red: 1.0, green: 0.0, blue: 0.8, alpha: 0.4)
+        instructionBg.lineWidth = 1.5
+        instructionBg.glowWidth = 2
+        instructionBg.position = CGPoint(x: centerX, y: centerY + controlZone.height * 0.2)
+        addChild(instructionBg)
+
         instructionLabel = SKLabelNode(text: "准备开始舞拳...")
-        instructionLabel?.fontSize = min(controlZone.width, controlZone.height) * 0.12
-        instructionLabel?.fontColor = .yellow
-        instructionLabel?.position = CGPoint(x: centerX, y: centerY + controlZone.height * 0.1)
+        instructionLabel?.fontSize = min(controlZone.width, controlZone.height) * 0.11
+        instructionLabel?.fontColor = SKColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0)
+        instructionLabel?.position = CGPoint(x: centerX, y: centerY + controlZone.height * 0.16)
         instructionLabel?.numberOfLines = 2
         addChild(instructionLabel!)
-        
-        // Interactive area for buttons (will be used during gameplay)
-        let buttonArea = SKShapeNode(rectOf: CGSize(width: controlZone.width * 0.8, height: controlZone.height * 0.4))
-        buttonArea.fillColor = .clear
-        buttonArea.strokeColor = SKColor(white: 0.3, alpha: 0.5)
-        buttonArea.lineWidth = 1
-        buttonArea.position = CGPoint(x: centerX, y: centerY - controlZone.height * 0.2)
-        buttonArea.name = "buttonArea"
-        addChild(buttonArea)
-        
-        let buttonAreaLabel = SKLabelNode(text: "游戏按钮区域")
-        buttonAreaLabel.fontSize = controlZone.height * 0.08
-        buttonAreaLabel.fontColor = SKColor(white: 0.6, alpha: 0.8)
-        buttonAreaLabel.position = CGPoint(x: centerX, y: centerY - controlZone.height * 0.25)
-        addChild(buttonAreaLabel)
     }
     
     private func createMusicControl(contentRect: CGRect) {
@@ -1196,11 +1185,12 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         let startX = screenWidth/2 - CGFloat(gestures.count - 1) * spacing / 2
         
         for (index, gesture) in gestures.enumerated() {
-            // Dynamic button background
+            // Neon button background
             let buttonBg = SKShapeNode(circleOfRadius: buttonSize*0.7)
-            buttonBg.fillColor = SKColor(white: 0.3, alpha: 0.8)
-            buttonBg.strokeColor = .white
+            buttonBg.fillColor = SKColor(red: 0.1, green: 0.05, blue: 0.2, alpha: 0.85)
+            buttonBg.strokeColor = SKColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.8)
             buttonBg.lineWidth = 2
+            buttonBg.glowWidth = 3
             buttonBg.position = CGPoint(x: startX + CGFloat(index) * spacing, y: buttonAreaY)
             buttonBg.name = "gesture_\(gesture)"
             addChild(buttonBg)
@@ -1379,11 +1369,12 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         ]
         
         for (index, direction) in directions.enumerated() {
-            // Dynamic button background
+            // Neon button background
             let buttonBg = SKShapeNode(circleOfRadius: buttonSize*0.8)
-            buttonBg.fillColor = SKColor(white: 0.3, alpha: 0.8)
-            buttonBg.strokeColor = .yellow
+            buttonBg.fillColor = SKColor(red: 0.15, green: 0.05, blue: 0.1, alpha: 0.85)
+            buttonBg.strokeColor = SKColor(red: 1.0, green: 0.0, blue: 0.8, alpha: 0.8)
             buttonBg.lineWidth = 2
+            buttonBg.glowWidth = 3
             buttonBg.position = positions[index]
             buttonBg.name = "direction_\(direction)"
             addChild(buttonBg)
