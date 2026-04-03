@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:baike.baidu.com)",
+      "Bash(xcodebuild:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Bash(open:*)",
+      "Bash(grep:*)",
+      "mcp__ide__getDiagnostics"
+    ],
+    "deny": []
+  }
+}

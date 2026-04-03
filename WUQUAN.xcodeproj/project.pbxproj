@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		EF7334AB2E2DC9AB001587DD /* Christopher Ledger - Club Classics Remix.wav in Resources */ = {isa = PBXBuildFile; fileRef = EF7334AA2E2DC9AB001587DD /* Christopher Ledger - Club Classics Remix.wav */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		EF7333AE2E2C9B8A001587DD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,7 @@
 		EF7333942E2C9B89001587DD /* WUQUAN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WUQUAN.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EF7333AD2E2C9B8A001587DD /* WUQUANTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WUQUANTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EF7333B72E2C9B8A001587DD /* WUQUANUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WUQUANUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EF7334AA2E2DC9AB001587DD /* Christopher Ledger - Club Classics Remix.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "Christopher Ledger - Club Classics Remix.wav"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,6 +80,7 @@
 		EF73338B2E2C9B89001587DD = {
 			isa = PBXGroup;
 			children = (
+				EF7334A92E2DC70D001587DD /* Music */,
 				EF7333962E2C9B89001587DD /* WUQUAN */,
 				EF7333B02E2C9B8A001587DD /* WUQUANTests */,
 				EF7333BA2E2C9B8A001587DD /* WUQUANUITests */,
@@ -90,6 +96,14 @@
 				EF7333B72E2C9B8A001587DD /* WUQUANUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		EF7334A92E2DC70D001587DD /* Music */ = {
+			isa = PBXGroup;
+			children = (
+				EF7334AA2E2DC9AB001587DD /* Christopher Ledger - Club Classics Remix.wav */,
+			);
+			path = Music;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -212,6 +226,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EF7334AB2E2DC9AB001587DD /* Christopher Ledger - Club Classics Remix.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -397,6 +412,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 5767MTQ2K3;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "舞拳游戏需要访问您的音乐库来选择背景音乐，让您在游戏过程中享受个人喜爱的音乐。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -425,6 +441,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 5767MTQ2K3;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "舞拳游戏需要访问您的音乐库来选择背景音乐，让您在游戏过程中享受个人喜爱的音乐。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
