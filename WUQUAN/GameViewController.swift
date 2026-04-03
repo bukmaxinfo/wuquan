@@ -22,30 +22,39 @@ class GameViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        // Request MediaPlayer permission
         requestMediaLibraryPermission()
-        
-        // Create GameScene programmatically
-        if let view = self.view as? SKView {
-            // Create the scene with the view's bounds
-            let scene = GameScene(size: view.bounds.size)
-            self.gameScene = scene
-            
-            // Set the scale mode to scale to fit the window
-            scene.scaleMode = .aspectFill
-            
-            // Present the scene
-            view.presentScene(scene)
-            
-            view.ignoresSiblingOrder = true
-            
-            view.showsFPS = false
-            view.showsNodeCount = false
-        }
-        
-        // Setup motion detection
         setupMotionDetection()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+
+        // Show character selection on first appearance
+        if gameScene == nil {
+            showCharacterSelection()
+        }
+    }
+
+    private func showCharacterSelection() {
+        let selectionVC = CharacterSelectionViewController()
+        selectionVC.delegate = self
+        selectionVC.modalPresentationStyle = .fullScreen
+        present(selectionVC, animated: true)
+    }
+
+    private func startGame(playerStyle: CharacterStyle, opponentStyle: CharacterStyle) {
+        guard let view = self.view as? SKView else { return }
+
+        let scene = GameScene(size: view.bounds.size)
+        scene.playerStyle = playerStyle
+        scene.opponentStyle = opponentStyle
+        scene.scaleMode = .aspectFill
+        self.gameScene = scene
+
+        view.presentScene(scene)
+        view.ignoresSiblingOrder = true
+        view.showsFPS = false
+        view.showsNodeCount = false
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
@@ -111,5 +120,13 @@ class GameViewController: UIViewController {
     
     deinit {
         motionManager.stopAccelerometerUpdates()
+    }
+}
+
+// MARK: - CharacterSelectionDelegate
+
+extension GameViewController: CharacterSelectionDelegate {
+    func characterSelectionDidComplete(playerStyle: CharacterStyle, opponentStyle: CharacterStyle) {
+        startGame(playerStyle: playerStyle, opponentStyle: opponentStyle)
     }
 }

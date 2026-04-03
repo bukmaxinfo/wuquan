@@ -106,6 +106,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     
     var entities = [GKEntity]()
     var graphs = [String : GKGraph]()
+
+    // Character styles (set before scene is presented)
+    var playerStyle: CharacterStyle = .sportyGuy
+    var opponentStyle: CharacterStyle = .nightclubPrince
     
     private var lastUpdateTime : TimeInterval = 0
     private var gamePhase: GamePhase = .handshake(step: 1)
@@ -146,6 +150,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var selectedMusicURL: URL?
     private var musicButton: SKLabelNode?
     
+    // Characters
+    private var playerCharacter: CharacterNode?
+    private var characterNode: CharacterNode?
+
     // Settings System
     private var settingsOverlay: SKNode?
     private var isSettingsVisible = false
@@ -360,7 +368,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         addChild(scoreBackground)
         
         // Score label
-        let scoreLabel = SKLabelNode(text: "玩家 0 : 0 夜店小王子")
+        let scoreLabel = SKLabelNode(text: "玩家 0 : 0 对手")
         scoreLabel.fontSize = min(headerZone.width, headerZone.height) * 0.12
         scoreLabel.fontColor = .white
         scoreLabel.position = CGPoint(x: centerX, y: centerY - headerZone.height * 0.4)
@@ -385,19 +393,26 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         playerArea.lineWidth = 2
         playerArea.position = CGPoint(x: playerX, y: centerY)
         addChild(playerArea)
-        
+
         // Player label
         let playerLabel = SKLabelNode(text: "你")
         playerLabel.fontSize = areaWidth * 0.2
         playerLabel.fontColor = .cyan
         playerLabel.fontName = "Helvetica-Bold"
-        playerLabel.position = CGPoint(x: playerX, y: centerY + areaHeight * 0.25)
+        playerLabel.position = CGPoint(x: playerX, y: centerY + areaHeight * 0.4)
         addChild(playerLabel)
-        
-        // Player gesture display
+
+        // Player animated character (mirrored to face AI)
+        let pChar = CharacterNode(height: areaHeight * 0.7, style: playerStyle, mirrored: true)
+        pChar.position = CGPoint(x: playerX, y: centerY - areaHeight * 0.05)
+        addChild(pChar)
+        playerCharacter = pChar
+        pChar.animateIdle()
+
+        // Player gesture display (below character)
         playerGestureLabel = SKLabelNode(text: "")
-        playerGestureLabel?.fontSize = areaWidth * 0.4
-        playerGestureLabel?.position = CGPoint(x: playerX, y: centerY - areaHeight * 0.1)
+        playerGestureLabel?.fontSize = areaWidth * 0.3
+        playerGestureLabel?.position = CGPoint(x: playerX, y: centerY - areaHeight * 0.4)
         addChild(playerGestureLabel!)
         
         // VS label in center
@@ -415,36 +430,39 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         aiArea.lineWidth = 2
         aiArea.position = CGPoint(x: aiX, y: centerY)
         addChild(aiArea)
-        
+
         // AI label
-        let aiLabel = SKLabelNode(text: "夜店小王子")
+        let aiLabel = SKLabelNode(text: opponentStyle.name)
         aiLabel.fontSize = areaWidth * 0.2
         aiLabel.fontColor = .red
         aiLabel.fontName = "Helvetica-Bold"
-        aiLabel.position = CGPoint(x: aiX, y: centerY + areaHeight * 0.25)
+        aiLabel.position = CGPoint(x: aiX, y: centerY + areaHeight * 0.4)
         addChild(aiLabel)
-        
-        // AI gesture display
+
+        // AI animated character
+        let character = CharacterNode(height: areaHeight * 0.7, style: opponentStyle)
+        character.position = CGPoint(x: aiX, y: centerY - areaHeight * 0.05)
+        addChild(character)
+        characterNode = character
+        character.animateIdle()
+
+        // AI gesture display (positioned below character)
         aiGestureLabel = SKLabelNode(text: "")
-        aiGestureLabel?.fontSize = areaWidth * 0.4
-        aiGestureLabel?.position = CGPoint(x: aiX, y: centerY - areaHeight * 0.1)
+        aiGestureLabel?.fontSize = areaWidth * 0.3
+        aiGestureLabel?.position = CGPoint(x: aiX, y: centerY - areaHeight * 0.4)
         addChild(aiGestureLabel!)
-        
-        // Hand animation nodes
+
+        // Hidden hand nodes (kept for compatibility with shake handlers)
         let handRadius = min(areaWidth, areaHeight) * 0.08
-        
+
         playerHandNode = SKShapeNode(circleOfRadius: handRadius)
-        playerHandNode?.fillColor = .cyan
-        playerHandNode?.strokeColor = .white
-        playerHandNode?.lineWidth = 2
-        playerHandNode?.position = CGPoint(x: playerX, y: centerY - areaHeight * 0.35)
+        playerHandNode?.position = CGPoint(x: playerX, y: centerY)
+        playerHandNode?.isHidden = true
         addChild(playerHandNode!)
-        
+
         aiHandNode = SKShapeNode(circleOfRadius: handRadius)
-        aiHandNode?.fillColor = .red
-        aiHandNode?.strokeColor = .white
-        aiHandNode?.lineWidth = 2
-        aiHandNode?.position = CGPoint(x: aiX, y: centerY - areaHeight * 0.35)
+        aiHandNode?.position = CGPoint(x: aiX, y: centerY)
+        aiHandNode?.isHidden = true
         addChild(aiHandNode!)
     }
     
@@ -1057,7 +1075,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func startHandshakePhase() {
         gamePhase = .handshake(step: 1)
         phaseLabel?.text = "握手阶段 (1/4)"
-        instructionLabel?.text = "与夜店小王子握手四次..."
+        instructionLabel?.text = "与对手握手四次..."
         
         // Slow down music for handshake phase
         adjustMusicTempo(0.8)
@@ -1066,19 +1084,11 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func animateHandshake() {
-        guard case .handshake(let step) = gamePhase else { return }
-        
-        // Animate hands moving together
-        let moveToCenter = SKAction.moveTo(x: size.width/2 - 50, duration: 0.5)
-        let moveToCenter2 = SKAction.moveTo(x: size.width/2 + 50, duration: 0.5)
-        let moveBack = SKAction.moveTo(x: size.width/4, duration: 0.5)
-        let moveBack2 = SKAction.moveTo(x: 3*size.width/4, duration: 0.5)
-        
-        let sequence = SKAction.sequence([moveToCenter, moveBack])
-        let sequence2 = SKAction.sequence([moveToCenter2, moveBack2])
-        
-        playerHandNode?.run(sequence)
-        aiHandNode?.run(sequence2) {
+        guard case .handshake(_) = gamePhase else { return }
+
+        // Both characters do handshake animation
+        playerCharacter?.animateHandshake {}
+        characterNode?.animateHandshake {
             self.completeHandshakeStep()
         }
     }
@@ -1112,49 +1122,11 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func animateFreeMovement() {
         guard case .freeMovement(let step) = gamePhase else { return }
         
-        // Enhanced visual feedback with particle effects
-        let screenSize = min(size.width, size.height)
-        let swingRange = screenSize * 0.08
-        
-        // Create swing trail effect
-        let trail = SKShapeNode(circleOfRadius: 3)
-        trail.fillColor = .yellow
-        trail.alpha = 0.7
-        trail.position = playerHandNode?.position ?? CGPoint.zero
-        addChild(trail)
-        
-        // Fade out trail
-        let fadeOut = SKAction.sequence([
-            SKAction.wait(forDuration: 0.2),
-            SKAction.fadeOut(withDuration: 0.3),
-            SKAction.removeFromParent()
-        ])
-        trail.run(fadeOut)
-        
-        // Enhanced swinging animation with bounce
-        let randomX = CGFloat.random(in: -swingRange...swingRange)
-        let randomY = CGFloat.random(in: -swingRange*0.6...swingRange*0.6)
-        
-        let swing = SKAction.moveBy(x: randomX, y: randomY, duration: 0.25)
-        swing.timingMode = .easeOut
-        
-        let swingBack = SKAction.moveBy(x: -randomX, y: -randomY, duration: 0.25)
-        swingBack.timingMode = .easeIn
-        
-        let bounce = SKAction.sequence([swing, swingBack])
-        let sequence = SKAction.sequence([bounce])
-        
-        // Scale effect for impact
-        let scaleUp = SKAction.scale(to: 1.2, duration: 0.1)
-        let scaleDown = SKAction.scale(to: 1.0, duration: 0.15)
-        let scaleSequence = SKAction.sequence([scaleUp, scaleDown])
-        
-        playerHandNode?.run(sequence)
-        playerHandNode?.run(scaleSequence)
-        aiHandNode?.run(sequence) {
+        // Both characters dance
+        playerCharacter?.animateFreeMovement {}
+        characterNode?.animateFreeMovement {
             self.completeFreeMovementStep()
         }
-        aiHandNode?.run(scaleSequence)
     }
     
     private func completeFreeMovementStep() {
@@ -1181,9 +1153,12 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         
         // Show gesture options
         showGestureButtons()
-        
+
         // Enhanced AI logic with strategy
         aiGesture = chooseAIGesture()
+
+        // Character enters thinking pose
+        characterNode?.setExpression(.smirk)
     }
     
     private func showGestureButtons() {
@@ -1222,7 +1197,13 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         playerGestureHistory.append(gesture)
         playerGestureLabel?.text = gesture.emoji
         aiGestureLabel?.text = aiGesture?.emoji ?? ""
-        
+
+        // Both characters reveal gestures with animation
+        playerCharacter?.animateGestureReveal(gesture)
+        if let aiG = aiGesture {
+            characterNode?.animateGestureReveal(aiG)
+        }
+
         // Remove gesture buttons
         children.filter { $0.name?.hasPrefix("gesture_") == true }.forEach { $0.removeFromParent() }
         
@@ -1388,10 +1369,16 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         playSelectSound()
         playerDirection = direction
-        
+
+        // Both characters point in their chosen directions
+        playerCharacter?.animateDirectionPoint(direction)
+        if let aiDir = aiDirection {
+            characterNode?.animateDirectionPoint(aiDir)
+        }
+
         // Remove direction buttons
         children.filter { $0.name?.hasPrefix("direction_") == true }.forEach { $0.removeFromParent() }
-        
+
         showResult()
     }
     
@@ -1418,20 +1405,26 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             playSuccessSound()
             showSuccessEffect()
+            playerCharacter?.setExpression(.neutral)
+            characterNode?.setExpression(.neutral)
         case .playerLoses:
-            resultText = "错误! 违反规则"
+            resultText = "错误! 违反规则 — 喝酒！🍺"
             winner = "玩家失败 😢"
             gameScore.ai += 1
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             playFailureSound()
             showFailureEffect()
+            playerCharacter?.animateDrink()
+            characterNode?.animateWin()
         case .aiLoses:
-            resultText = "错误! 违反规则"
-            winner = "夜店小王子失败 🎉"
+            resultText = "错误! 违反规则 — 对手喝酒！🍺"
+            winner = "对手失败 🎉"
             gameScore.player += 1
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             playSuccessSound()
             showVictoryEffect()
+            playerCharacter?.animateWin()
+            characterNode?.animateDrink()
         }
         
         roundCount += 1
@@ -1470,7 +1463,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             instructionLabel?.text = "最终比分 \(gameScore.player) : \(gameScore.ai)"
             showVictoryEffect()
         } else {
-            phaseLabel?.text = "夜店小王子获胜！"
+            phaseLabel?.text = "对手获胜！"
             instructionLabel?.text = "最终比分 \(gameScore.player) : \(gameScore.ai)"
             showFailureEffect()
         }
@@ -1497,6 +1490,11 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         playerGestureLabel?.text = ""
         aiGestureLabel?.text = ""
 
+        playerCharacter?.resetPose()
+        playerCharacter?.animateIdle()
+        characterNode?.resetPose()
+        characterNode?.animateIdle()
+
         startHandshakePhase()
     }
 
@@ -1511,7 +1509,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
 
     private func updateScoreDisplay() {
         if let scoreLabel = childNode(withName: "scoreLabel") as? SKLabelNode {
-            scoreLabel.text = "玩家 \(gameScore.player) : \(gameScore.ai) 夜店小王子  (\(roundCount)/\(maxRounds))"
+            scoreLabel.text = "玩家 \(gameScore.player) : \(gameScore.ai) 对手  (\(roundCount)/\(maxRounds))"
         }
         UserDefaults.standard.set(gameScore.player, forKey: "playerScore")
         UserDefaults.standard.set(gameScore.ai, forKey: "aiScore")
