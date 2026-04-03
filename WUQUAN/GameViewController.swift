@@ -19,6 +19,7 @@ class GameViewController: UIViewController {
     private var lastShakeTime: TimeInterval = 0
     private let shakeThreshold: Double = 2.5
     private let shakeCooldown: TimeInterval = 0.5
+    private var hasShownSelection = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -29,8 +30,8 @@ class GameViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
-        // Show character selection on first appearance
-        if gameScene == nil {
+        if !hasShownSelection {
+            hasShownSelection = true
             showCharacterSelection()
         }
     }
@@ -127,6 +128,8 @@ class GameViewController: UIViewController {
 
 extension GameViewController: CharacterSelectionDelegate {
     func characterSelectionDidComplete(playerStyle: CharacterStyle, opponentStyle: CharacterStyle) {
-        startGame(playerStyle: playerStyle, opponentStyle: opponentStyle)
+        dismiss(animated: true) {
+            self.startGame(playerStyle: playerStyle, opponentStyle: opponentStyle)
+        }
     }
 }

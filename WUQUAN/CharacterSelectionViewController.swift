@@ -66,6 +66,7 @@ class CharacterSelectionViewController: UIViewController {
 
         // Preview area
         previewScene = SKView()
+        previewScene.isUserInteractionEnabled = false
         previewScene.backgroundColor = UIColor(red: 0.08, green: 0.08, blue: 0.18, alpha: 1)
         previewScene.layer.cornerRadius = 15
         previewScene.layer.borderWidth = 2
@@ -172,7 +173,6 @@ class CharacterSelectionViewController: UIViewController {
     @objc private func startTapped() {
         guard let pStyle = selectedPlayerStyle, let oStyle = selectedOpponentStyle else { return }
         delegate?.characterSelectionDidComplete(playerStyle: pStyle, opponentStyle: oStyle)
-        dismiss(animated: true)
     }
 }
 
@@ -235,11 +235,7 @@ extension CharacterSelectionViewController: UICollectionViewDelegate {
             subtitleLabel.text = "\(selectedPlayerStyle!.name) VS \(char.name)"
             subtitleLabel.textColor = .yellow
             startButton.isHidden = false
-
-            // Pulse the start button
-            UIView.animate(withDuration: 0.3, delay: 0, options: [.repeat, .autoreverse]) {
-                self.startButton.transform = CGAffineTransform(scaleX: 1.05, y: 1.05)
-            }
+            startButton.alpha = 1.0
         }
 
         collectionView.reloadData()

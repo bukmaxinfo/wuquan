@@ -23,12 +23,44 @@ final class WUQUANUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testCharacterSelectionToGameStart() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        // Handle media permission dialog if it appears
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allowBtn = springboard.buttons["Don't Allow"]
+        if allowBtn.waitForExistence(timeout: 3) {
+            allowBtn.tap()
+        }
+
+        // Verify character selection screen appears
+        let title = app.staticTexts["选择你的角色"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "Character selection screen should appear")
+
+        // Tap first character cell (player)
+        let firstCell = app.collectionViews.cells.element(boundBy: 0)
+        XCTAssertTrue(firstCell.waitForExistence(timeout: 3))
+        firstCell.tap()
+
+        // Verify prompt changed to opponent selection
+        let opponentTitle = app.staticTexts["选择你的对手"]
+        XCTAssertTrue(opponentTitle.waitForExistence(timeout: 3), "Should show opponent selection prompt")
+
+        // Tap second character cell (opponent — different from player)
+        let secondCell = app.collectionViews.cells.element(boundBy: 1)
+        secondCell.tap()
+
+        // Verify start button appears
+        let startButton = app.buttons["开始游戏！"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 3), "Start button should appear")
+
+        // Tap start
+        startButton.tap()
+
+        // Verify game started — the SKView should be showing game content
+        // The character selection should be dismissed
+        XCTAssertFalse(opponentTitle.waitForExistence(timeout: 3), "Selection screen should be dismissed")
     }
 
     @MainActor
