@@ -10,9 +10,10 @@ import SpriteKit
 import GameplayKit
 import MediaPlayer
 import CoreMotion
+import GameKit
 
 class GameViewController: UIViewController {
-    
+
     // Motion detection
     private let motionManager = CMMotionManager()
     private var gameScene: GameScene?
@@ -25,11 +26,11 @@ class GameViewController: UIViewController {
         super.viewDidLoad()
         requestMediaLibraryPermission()
         setupMotionDetection()
+        GameCenterManager.shared.authenticatePlayer(from: self)
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-
         if !hasShownSelection {
             hasShownSelection = true
             showCharacterSelection()
@@ -43,12 +44,20 @@ class GameViewController: UIViewController {
         present(selectionVC, animated: true)
     }
 
-    private func startGame(playerStyle: CharacterStyle, opponentStyle: CharacterStyle) {
+    private func startGame(
+        playerStyle: CharacterStyle, playerVariant: CharacterColorVariant,
+        opponentStyle: CharacterStyle, opponentVariant: CharacterColorVariant,
+        gameMode: GameMode, theme: GameTheme
+    ) {
         guard let view = self.view as? SKView else { return }
 
         let scene = GameScene(size: view.bounds.size)
         scene.playerStyle = playerStyle
+        scene.playerColorVariant = playerVariant
         scene.opponentStyle = opponentStyle
+        scene.opponentColorVariant = opponentVariant
+        scene.gameMode = gameMode
+        scene.gameTheme = theme
         scene.scaleMode = .aspectFill
         self.gameScene = scene
 
@@ -59,66 +68,32 @@ class GameViewController: UIViewController {
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            return .allButUpsideDown
-        } else {
-            return .all
+        UIDevice.current.userInterfaceIdiom == .phone ? .allButUpsideDown : .all
+    }
+
+    override var prefersStatusBarHidden: Bool { true }
+
+    private func requestMediaLibraryPermission() {
+        MPMediaLibrary.requestAuthorization { _ in }
+    }
+
+    // MARK: - Motion Detection
+
+    private func setupMotionDetection() {
+        guard motionManager.isAccelerometerAvailable else { return }
+        motionManager.accelerometerUpdateInterval = 0.1
+        motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
+            guard let self, let acc = data?.acceleration else { return }
+            let mag = sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z)
+            let now = CACurrentMediaTime()
+            if mag > self.shakeThreshold && now - self.lastShakeTime > self.shakeCooldown {
+                self.lastShakeTime = now
+                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                self.gameScene?.handleShakeGesture()
+            }
         }
     }
 
-    override var prefersStatusBarHidden: Bool {
-        return true
-    }
-    
-    private func requestMediaLibraryPermission() {
-        MPMediaLibrary.requestAuthorization { status in
-            switch status {
-            case .authorized:
-                print("MediaPlayer access granted")
-            case .denied, .restricted:
-                print("MediaPlayer access denied")
-            case .notDetermined:
-                print("MediaPlayer access not determined")
-            @unknown default:
-                print("Unknown MediaPlayer access status")
-            }
-        }
-    }
-    
-    // MARK: - Motion Detection
-    
-    private func setupMotionDetection() {
-        guard motionManager.isAccelerometerAvailable else {
-            return
-        }
-        
-        motionManager.accelerometerUpdateInterval = 0.1
-        motionManager.startAccelerometerUpdates(to: .main) { [weak self] (data, error) in
-            guard let self = self, let acceleration = data?.acceleration else { return }
-            
-            let magnitude = sqrt(acceleration.x * acceleration.x + 
-                               acceleration.y * acceleration.y + 
-                               acceleration.z * acceleration.z)
-            
-            let currentTime = CACurrentMediaTime()
-            
-            if magnitude > self.shakeThreshold && 
-               currentTime - self.lastShakeTime > self.shakeCooldown {
-                self.lastShakeTime = currentTime
-                self.handleShakeGesture()
-            }
-        }
-    }
-    
-    private func handleShakeGesture() {
-        // Provide haptic feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
-        impactFeedback.impactOccurred()
-        
-        // Forward shake event to game scene
-        gameScene?.handleShakeGesture()
-    }
-    
     deinit {
         motionManager.stopAccelerometerUpdates()
     }
@@ -127,9 +102,17 @@ class GameViewController: UIViewController {
 // MARK: - CharacterSelectionDelegate
 
 extension GameViewController: CharacterSelectionDelegate {
-    func characterSelectionDidComplete(playerStyle: CharacterStyle, opponentStyle: CharacterStyle) {
+    func characterSelectionDidComplete(
+        playerStyle: CharacterStyle, playerVariant: CharacterColorVariant,
+        opponentStyle: CharacterStyle, opponentVariant: CharacterColorVariant,
+        gameMode: GameMode, theme: GameTheme
+    ) {
         dismiss(animated: true) {
-            self.startGame(playerStyle: playerStyle, opponentStyle: opponentStyle)
+            self.startGame(
+                playerStyle: playerStyle, playerVariant: playerVariant,
+                opponentStyle: opponentStyle, opponentVariant: opponentVariant,
+                gameMode: gameMode, theme: theme
+            )
         }
     }
 }

@@ -1,0 +1,110 @@
+/* App name */
+"app.name" = "WUQUAN";
+
+/* Mode selection */
+"mode.title" = "WUQUAN";
+"mode.subtitle" = "Choose Game Mode";
+"mode.vsAI" = "VS Computer";
+"mode.vsAI.subtitle" = "Single-player vs AI";
+"mode.local" = "Local 2-Player";
+"mode.local.subtitle" = "Two players, one device";
+
+/* Character selection */
+"character.pickPlayer" = "Choose Your Character";
+"character.pickPlayer.subtitle" = "Who are you?";
+"character.pickColor" = "Choose Color";
+"character.pickColor.subtitle" = "%@ custom color";
+"character.pickOpponent" = "Choose Opponent";
+"character.pickOpponent.subtitle" = "Who is your opponent?";
+"character.pickP2" = "Choose Player 2 Character";
+"character.pickP2.subtitle" = "Who is Player 2?";
+"character.pickTheme" = "Choose Arena Theme";
+"character.pickTheme.subtitle" = "Set the mood for your battle";
+"character.back" = "← Back";
+"character.next" = "Next →";
+"character.ready" = "Ready!";
+"character.vs" = "%@ VS %@";
+
+/* Game phases */
+"phase.handshake" = "Handshake";
+"phase.freeMove" = "Warm Up";
+"phase.gesture" = "Choose Gesture";
+"phase.direction" = "Choose Direction";
+"phase.result" = "Result";
+
+/* Gestures */
+"gesture.rock" = "Rock";
+"gesture.paper" = "Paper";
+"gesture.scissors" = "Scissors";
+
+/* Directions */
+"direction.up" = "Up";
+"direction.down" = "Down";
+"direction.left" = "Left";
+"direction.right" = "Right";
+
+/* Game result */
+"result.win" = "You Win! 🎉";
+"result.lose" = "You Lose 😢";
+"result.continue" = "Continue!";
+"result.drink" = "Drink Up! 🍺";
+
+/* Scores */
+"score.player" = "Player";
+"score.ai" = "AI";
+"score.streak" = "Streak: %d";
+"score.round" = "Round %d / %d";
+
+/* Buttons */
+"button.start" = "Start Game!";
+"button.restart" = "Play Again";
+"button.settings" = "Settings";
+"button.rules" = "Rules";
+
+/* Settings */
+"settings.title" = "Settings";
+"settings.music" = "Music";
+"settings.volume" = "Volume";
+"settings.difficulty" = "Difficulty";
+"settings.difficulty.easy" = "Easy";
+"settings.difficulty.medium" = "Normal";
+"settings.difficulty.hard" = "Hard";
+
+/* Themes */
+"theme.neon" = "Neon Nightclub";
+"theme.cyber" = "Cyberpunk";
+"theme.retro" = "Retro Arcade";
+"theme.nature" = "Forest Realm";
+"theme.fire" = "Hellfire";
+"theme.ice" = "Arctic Tundra";
+
+/* Color variants */
+"color.original" = "Original";
+"color.red" = "Crimson";
+"color.orange" = "Flame";
+"color.gold" = "Gold";
+"color.green" = "Jade";
+"color.blue" = "Sky";
+"color.purple" = "Violet";
+"color.rose" = "Rose";
+
+/* Achievements */
+"achievement.firstWin" = "First Blood";
+"achievement.streak3" = "On Fire";
+"achievement.streak5" = "Unstoppable";
+"achievement.allChars" = "Collector";
+"achievement.wins10" = "Veteran";
+"achievement.wins50" = "Champion";
+"achievement.winsVsAI10" = "AI Crusher";
+"achievement.localGames5" = "Party Starter";
+
+/* Leaderboards */
+"leaderboard.winStreak" = "Best Win Streak";
+"leaderboard.totalWins" = "Total Wins";
+"leaderboard.roundsPlayed" = "Rounds Played";
+
+/* Alerts */
+"alert.ok" = "OK";
+"alert.cancel" = "Cancel";
+"alert.gamecenter.notLoggedIn.title" = "Not Signed Into Game Center";
+"alert.gamecenter.notLoggedIn.message" = "Sign in to Game Center in Settings to view leaderboards and achievements.";

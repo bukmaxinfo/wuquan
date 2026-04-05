@@ -1,11 +1,11 @@
 # 舞拳 (WUQUAN) - Project Tracker
-Last updated: 2026-04-02
+Last updated: 2026-04-03
 
 ## Current Milestone: Content & Polish
-Progress: 0/4 tasks complete
+Progress: 1/4 tasks complete
 
 ### P1 - Should Have
-- [ ] Add multiplayer support (local or online)
+- [x] Add local multiplayer support (two players on same device) - 2026-04-03
 - [ ] Add custom character/theme selection
 
 ### P2 - Nice to Have
@@ -21,6 +21,9 @@ Progress: 0/4 tasks complete
 - [ ] Refactor GameScene.swift (~2100 lines) into smaller components
 
 ## Completed Milestones
+### Content & Polish (partial) - 2026-04-03
+- [x] Add local multiplayer support (two players on same device)
+
 ### Gameplay Polish - 2026-04-02
 - [x] Fix AI direction selection to use strategic weighted choices based on gesture match state
 - [x] Add unit tests for GameRules, Gesture, Direction, and MusicStore

@@ -1,0 +1,110 @@
+/* App name */
+"app.name" = "舞拳";
+
+/* Mode selection */
+"mode.title" = "舞 拳";
+"mode.subtitle" = "选择游戏模式";
+"mode.vsAI" = "VS 电脑";
+"mode.vsAI.subtitle" = "单人挑战 AI";
+"mode.local" = "本地双人";
+"mode.local.subtitle" = "两人同机对战";
+
+/* Character selection */
+"character.pickPlayer" = "选择玩家 1 角色";
+"character.pickPlayer.subtitle" = "你是谁？";
+"character.pickColor" = "选择颜色";
+"character.pickColor.subtitle" = "%@ 的专属配色";
+"character.pickOpponent" = "选择对手角色";
+"character.pickOpponent.subtitle" = "谁是你的对手？";
+"character.pickP2" = "选择玩家 2 角色";
+"character.pickP2.subtitle" = "玩家 2 是谁？";
+"character.pickTheme" = "选择舞台主题";
+"character.pickTheme.subtitle" = "为你们的对决设置氛围";
+"character.back" = "← 返回";
+"character.next" = "下一步 →";
+"character.ready" = "准备好了！";
+"character.vs" = "%@ VS %@";
+
+/* Game phases */
+"phase.handshake" = "握手热身";
+"phase.freeMove" = "自由走位";
+"phase.gesture" = "选择手势";
+"phase.direction" = "选择方向";
+"phase.result" = "结果";
+
+/* Gestures */
+"gesture.rock" = "石头";
+"gesture.paper" = "布";
+"gesture.scissors" = "剪刀";
+
+/* Directions */
+"direction.up" = "上";
+"direction.down" = "下";
+"direction.left" = "左";
+"direction.right" = "右";
+
+/* Game result */
+"result.win" = "你赢了！🎉";
+"result.lose" = "你输了 😢";
+"result.continue" = "继续！";
+"result.drink" = "喝酒！🍺";
+
+/* Scores */
+"score.player" = "玩家";
+"score.ai" = "电脑";
+"score.streak" = "连胜：%d";
+"score.round" = "第 %d / %d 轮";
+
+/* Buttons */
+"button.start" = "开始游戏！";
+"button.restart" = "再来一局";
+"button.settings" = "设置";
+"button.rules" = "规则";
+
+/* Settings */
+"settings.title" = "设置";
+"settings.music" = "音乐";
+"settings.volume" = "音量";
+"settings.difficulty" = "难度";
+"settings.difficulty.easy" = "简单";
+"settings.difficulty.medium" = "普通";
+"settings.difficulty.hard" = "困难";
+
+/* Themes */
+"theme.neon" = "霓虹夜店";
+"theme.cyber" = "赛博朋克";
+"theme.retro" = "复古街机";
+"theme.nature" = "森林秘境";
+"theme.fire" = "地狱之火";
+"theme.ice" = "极地冰原";
+
+/* Color variants */
+"color.original" = "原色";
+"color.red" = "赤红";
+"color.orange" = "橙焰";
+"color.gold" = "金光";
+"color.green" = "翠绿";
+"color.blue" = "天蓝";
+"color.purple" = "幻紫";
+"color.rose" = "玫瑰";
+
+/* Achievements */
+"achievement.firstWin" = "初战告捷";
+"achievement.streak3" = "势如破竹";
+"achievement.streak5" = "无敌之势";
+"achievement.allChars" = "收藏达人";
+"achievement.wins10" = "老手";
+"achievement.wins50" = "冠军";
+"achievement.winsVsAI10" = "碾压机器";
+"achievement.localGames5" = "派对发起人";
+
+/* Leaderboards */
+"leaderboard.winStreak" = "最长连胜";
+"leaderboard.totalWins" = "总胜场";
+"leaderboard.roundsPlayed" = "总对局数";
+
+/* Alerts */
+"alert.ok" = "好的";
+"alert.cancel" = "取消";
+"alert.gamecenter.notLoggedIn.title" = "未登录 Game Center";
+"alert.gamecenter.notLoggedIn.message" = "请在系统设置中登录 Game Center 以查看排行榜和成就。";

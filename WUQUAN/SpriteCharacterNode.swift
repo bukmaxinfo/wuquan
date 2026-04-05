@@ -85,6 +85,46 @@ class SpriteCharacterNode: SKNode {
         glowNode?.run(SKAction.repeatForever(pulse))
     }
 
+    // MARK: - Accessories
+
+    private var accessoryNodes: [AccessoryNode] = []
+
+    /// Equips all currently-equipped items from AccessoryStore.
+    func equipAccessories() {
+        previewAccessories(equipped: AccessoryStore.shared.equippedItems, preview: nil)
+    }
+
+    /// Shows `equipped` items plus optionally one preview item (replaces any same-category equipped).
+    /// Used by the store to preview items before purchase/equip.
+    func previewAccessories(equipped: [AccessoryItem], preview: AccessoryItem?) {
+        accessoryNodes.forEach { $0.removeFromParent() }
+        accessoryNodes = []
+
+        var toShow = equipped
+        if let p = preview {
+            toShow.removeAll { $0.category == p.category }
+            toShow.append(p)
+        }
+
+        for item in toShow {
+            let node = AccessoryNode(item: item, characterHeight: targetHeight)
+            if isMirrored { node.applyMirrorCompensation() }
+            addChild(node)
+            accessoryNodes.append(node)
+            AnimationKit.springPopIn(node, delay: 0, fromScale: 0.3)
+        }
+    }
+
+    // MARK: - Color Variant
+
+    func applyColorVariant(_ variant: CharacterColorVariant) {
+        guard variant.blendFactor > 0 else { return }
+        spriteNode.color = variant.skTint
+        spriteNode.colorBlendFactor = variant.blendFactor
+        // Tint the glow to match
+        glowNode?.color = variant.skTint
+    }
+
     // MARK: - Pose Changes
 
     private func setPose(_ poseName: String, duration: TimeInterval = 0.15) {
@@ -128,57 +168,98 @@ class SpriteCharacterNode: SKNode {
 
     func animateHandshake(completion: @escaping () -> Void) {
         setPose("handshake")
+        let dir: CGFloat = isMirrored ? -1 : 1
 
-        // Bob forward and back
-        let forward = SKAction.moveBy(x: isMirrored ? -8 : 8, y: 0, duration: 0.2)
-        let back = SKAction.moveBy(x: isMirrored ? 8 : -8, y: 0, duration: 0.2)
-        let shake = SKAction.sequence([forward, back])
+        // Anticipation lean back, then three sharp jabs with squash/stretch
+        let leanBack = SKAction.moveBy(x: -dir * 10, y: 0, duration: 0.14)
+        leanBack.timingMode = .easeOut
 
-        run(SKAction.sequence([shake, SKAction.repeat(shake, count: 2)])) {
+        let mirrorSign: CGFloat = isMirrored ? -1.0 : 1.0
+        let jab = SKAction.sequence([
+            SKAction.moveBy(x: dir * 18, y: 0, duration: 0.08),
+            SKAction.scaleX(to: mirrorSign * 1.15, y: 0.88, duration: 0.06),
+            SKAction.scaleX(to: mirrorSign * 1.0, y: 1.0, duration: 0.1),
+            SKAction.moveBy(x: -dir * 8, y: 0, duration: 0.12)
+        ])
+
+        let bouncePause = SKAction.wait(forDuration: 0.08)
+
+        run(SKAction.sequence([
+            leanBack,
+            jab, bouncePause,
+            jab, bouncePause,
+            jab
+        ])) {
             self.setPose("idle")
             completion()
         }
     }
 
     func animateFreeMovement(completion: @escaping () -> Void) {
-        // Quick pose cycling to simulate dancing
-        let duration: TimeInterval = 0.18
+        let d: TimeInterval = 0.14
 
-        let bounce1 = SKAction.sequence([
-            SKAction.moveBy(x: 0, y: 8, duration: duration),
-            SKAction.moveBy(x: 0, y: -8, duration: duration)
+        // Bigger, snappier bounce with squash on landing
+        let bounce = SKAction.sequence([
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: 14, duration: d),
+                SKAction.scaleX(to: 0.88, y: 1.12, duration: d)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: -14, duration: d * 0.8),
+                SKAction.scaleX(to: 1.1, y: 0.9, duration: d * 0.4)
+            ]),
+            SKAction.scale(to: 1.0, duration: d * 0.4)
         ])
+
+        // Left/right sway between bounces
         let sway = SKAction.sequence([
-            SKAction.rotate(byAngle: 0.08, duration: duration),
-            SKAction.rotate(byAngle: -0.16, duration: duration),
-            SKAction.rotate(byAngle: 0.08, duration: duration)
+            SKAction.rotate(byAngle: 0.12, duration: d),
+            SKAction.rotate(byAngle: -0.24, duration: d * 2),
+            SKAction.rotate(byAngle: 0.12, duration: d)
         ])
 
-        // Cycle through poses quickly
-        let poseSwap = SKAction.sequence([
-            SKAction.run { self.setPose("rock", duration: 0) },
-            SKAction.wait(forDuration: duration * 2),
-            SKAction.run { self.setPose("handshake", duration: 0) },
-            SKAction.wait(forDuration: duration * 2),
-            SKAction.run { self.setPose("scissors", duration: 0) },
-            SKAction.wait(forDuration: duration * 2),
-            SKAction.run { self.setPose("idle", duration: 0) },
-        ])
+        // Pose cycling — each holds for one bounce cycle
+        let poses = ["rock", "handshake", "paper", "scissors", "idle"]
+        var poseActions: [SKAction] = []
+        for pose in poses {
+            poseActions.append(SKAction.run { self.setPose(pose, duration: 0) })
+            poseActions.append(SKAction.wait(forDuration: d * 2))
+        }
+        let poseSwap = SKAction.sequence(poseActions)
 
-        run(SKAction.group([bounce1, bounce1, sway, poseSwap])) {
-            self.setPose("idle")
+        let bounceTwice = SKAction.repeat(bounce, count: 4)
+        let swayTwice = SKAction.repeat(sway, count: 2)
+
+        run(SKAction.group([bounceTwice, swayTwice, poseSwap])) {
+            self.setPose("idle", duration: 0.2)
             completion()
         }
     }
 
     func animateGestureReveal(_ gesture: Gesture) {
-        // Pull back, then slam forward with gesture
-        let pullBack = SKAction.moveBy(x: isMirrored ? 6 : -6, y: 0, duration: 0.12)
-        let slam = SKAction.moveBy(x: isMirrored ? -12 : 12, y: 0, duration: 0.08)
-        let settle = SKAction.moveBy(x: isMirrored ? 6 : -6, y: 0, duration: 0.15)
+        let dir: CGFloat = isMirrored ? -1 : 1
+
+        // Wind-up (lean back) → explosive slam → squash on impact → settle
+        let windUp = SKAction.group([
+            SKAction.moveBy(x: -dir * 14, y: -4, duration: 0.14),
+            SKAction.scaleX(to: 0.9, y: 1.08, duration: 0.14)
+        ])
+        windUp.timingMode = .easeOut
+
+        let slam = SKAction.group([
+            SKAction.moveBy(x: dir * 22, y: 4, duration: 0.07),
+            SKAction.scaleX(to: 1.18, y: 0.86, duration: 0.07)
+        ])
+        slam.timingMode = .easeIn
+
+        let settle = SKAction.group([
+            SKAction.moveBy(x: -dir * 8, y: 0, duration: 0.18),
+            SKAction.scale(to: 1.0, duration: 0.18)
+        ])
+        settle.timingMode = .easeOut
 
         run(SKAction.sequence([
-            pullBack,
+            windUp,
             SKAction.run { self.showGesture(gesture) },
             slam,
             settle
@@ -188,83 +269,202 @@ class SpriteCharacterNode: SKNode {
     func animateDirectionPoint(_ direction: Direction) {
         setPose("point")
 
-        // Thrust in the pointed direction
+        // Snap in the direction with squash, then spring back
         let dx: CGFloat
         let dy: CGFloat
         switch direction {
-        case .up: dx = 0; dy = 10
-        case .down: dx = 0; dy = -10
-        case .left: dx = -10; dy = 0
-        case .right: dx = 10; dy = 0
+        case .up:    dx = 0;   dy = 16
+        case .down:  dx = 0;   dy = -16
+        case .left:  dx = -16; dy = 0
+        case .right: dx = 16;  dy = 0
         }
 
-        let thrust = SKAction.moveBy(x: dx, y: dy, duration: 0.15)
-        let back = SKAction.moveBy(x: -dx, y: -dy, duration: 0.2)
-        run(SKAction.sequence([thrust, back]))
+        let snapOut = SKAction.group([
+            SKAction.moveBy(x: dx, y: dy, duration: 0.10),
+            SKAction.scaleX(to: dx != 0 ? 1.18 : 0.9, y: dy != 0 ? 1.18 : 0.9, duration: 0.10)
+        ])
+        snapOut.timingMode = .easeOut
+        let hold = SKAction.wait(forDuration: 0.12)
+        let springBack = SKAction.group([
+            SKAction.moveBy(x: -dx, y: -dy, duration: 0.22),
+            SKAction.scale(to: 1.0, duration: 0.22)
+        ])
+        springBack.timingMode = .easeOut
+
+        run(SKAction.sequence([snapOut, hold, springBack]))
     }
 
     func animateWin() {
         setPose("win")
+        let dir: CGFloat = isMirrored ? -1 : 1
 
-        // Jump and bounce
-        let jump = SKAction.sequence([
-            SKAction.moveBy(x: 0, y: 20, duration: 0.2),
-            SKAction.moveBy(x: 0, y: -20, duration: 0.15)
+        // Jump 1 — big, with spin
+        let jump1 = SKAction.sequence([
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: 35, duration: 0.22),
+                SKAction.scaleX(to: 0.85, y: 1.15, duration: 0.22),
+                SKAction.rotate(byAngle: dir * 0.35, duration: 0.22)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: -35, duration: 0.18),
+                SKAction.scaleX(to: 1.12, y: 0.88, duration: 0.1),   // land squash
+                SKAction.rotate(toAngle: 0, duration: 0.18)
+            ]),
+            SKAction.scale(to: 1.0, duration: 0.12)
         ])
-        run(SKAction.repeat(jump, count: 3))
+
+        // Jump 2 — medium, tilt other way
+        let jump2 = SKAction.sequence([
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: 22, duration: 0.18),
+                SKAction.rotate(byAngle: -dir * 0.2, duration: 0.18)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: -22, duration: 0.14),
+                SKAction.scaleX(to: 1.08, y: 0.93, duration: 0.08),
+                SKAction.rotate(toAngle: 0, duration: 0.14)
+            ]),
+            SKAction.scale(to: 1.0, duration: 0.1)
+        ])
+
+        // Jump 3 — small happy hop
+        let jump3 = SKAction.sequence([
+            SKAction.moveBy(x: 0, y: 14, duration: 0.14),
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: -14, duration: 0.12),
+                SKAction.scaleX(to: 1.05, y: 0.96, duration: 0.06)
+            ]),
+            SKAction.scale(to: 1.0, duration: 0.1)
+        ])
+
+        // Flash the glow bright on first jump
+        glowNode?.run(SKAction.sequence([
+            SKAction.fadeAlpha(to: 0.7, duration: 0.1),
+            SKAction.fadeAlpha(to: 0.2, duration: 0.6)
+        ]))
+
+        run(SKAction.sequence([jump1, jump2, jump3]))
     }
 
     func animateLose() {
         setPose("lose")
+        let dir: CGFloat = isMirrored ? -1 : 1
 
-        // Sink down
-        let sink = SKAction.moveBy(x: 0, y: -8, duration: 0.5)
-        sink.timingMode = .easeOut
-        run(sink)
+        // Head-shake of disbelief, then heavy slump
+        let shake = SKAction.sequence([
+            SKAction.rotate(byAngle:  dir * 0.12, duration: 0.08),
+            SKAction.rotate(byAngle: -dir * 0.24, duration: 0.1),
+            SKAction.rotate(byAngle:  dir * 0.20, duration: 0.1),
+            SKAction.rotate(byAngle: -dir * 0.16, duration: 0.1),
+            SKAction.rotate(byAngle:  dir * 0.10, duration: 0.1),
+            SKAction.rotate(toAngle: 0,           duration: 0.1)
+        ])
+        // Slump down with a final squash on landing
+        let slump = SKAction.sequence([
+            SKAction.moveBy(x: 0, y: -18, duration: 0.45),
+            SKAction.group([
+                SKAction.scaleX(to: 1.15, y: 0.88, duration: 0.08),
+                SKAction.wait(forDuration: 0.08)
+            ]),
+            SKAction.scale(to: 1.0, duration: 0.2)
+        ])
+        slump.timingMode = .easeOut
+
+        // Dim the glow
+        glowNode?.run(SKAction.fadeAlpha(to: 0.04, duration: 0.5))
+
+        run(SKAction.group([shake, slump]))
     }
 
     func animateDrink() {
         setPose("lose")
 
-        // Stagger side to side
+        // Tipsy lean, multiple big staggers, end tilted
         let stagger = SKAction.sequence([
-            SKAction.moveBy(x: 8, y: 0, duration: 0.25),
-            SKAction.moveBy(x: -16, y: 0, duration: 0.3),
-            SKAction.moveBy(x: 8, y: 0, duration: 0.25)
+            SKAction.group([
+                SKAction.moveBy(x: 14, y: 4, duration: 0.2),
+                SKAction.rotate(byAngle: 0.15, duration: 0.2)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: -26, y: -2, duration: 0.28),
+                SKAction.rotate(byAngle: -0.28, duration: 0.28)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: 20, y: 0, duration: 0.22),
+                SKAction.rotate(byAngle: 0.18, duration: 0.22)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: -8, y: -6, duration: 0.3),
+                SKAction.rotate(byAngle: -0.12, duration: 0.3)
+            ])
         ])
-        let sink = SKAction.moveBy(x: 0, y: -5, duration: 0.8)
-        run(SKAction.group([stagger, sink]))
+        let slump = SKAction.moveBy(x: 0, y: -10, duration: 0.8)
+        slump.timingMode = .easeOut
+
+        glowNode?.run(SKAction.fadeAlpha(to: 0.06, duration: 0.4))
+        run(SKAction.group([stagger, slump]))
     }
 
     func animateTell(_ gesture: Gesture, delay: TimeInterval, duration: TimeInterval) {
-        // Briefly flash the gesture pose then return to idle
+        // Flash pose with a quick scale emphasis
         let tell = SKAction.sequence([
             SKAction.wait(forDuration: delay),
-            SKAction.run { self.showGesture(gesture) },
+            SKAction.run {
+                self.showGesture(gesture)
+                self.run(AnimationKit.squashStretchX(self, intensity: 1.2))
+            },
             SKAction.wait(forDuration: duration),
-            SKAction.run { self.setPose("idle", duration: 0.1) }
+            SKAction.run { self.setPose("idle", duration: 0.12) }
         ])
         run(tell)
     }
 
     func animateIdle() {
-        // Gentle breathing/bob
+        // Visible bob — 7pt so it reads on screen
         let bob = SKAction.sequence([
-            SKAction.moveBy(x: 0, y: 3, duration: 1.5),
-            SKAction.moveBy(x: 0, y: -3, duration: 1.5)
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: 7, duration: 1.2),
+                SKAction.scaleX(to: 0.97, y: 1.03, duration: 1.2)   // breathe in
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: -7, duration: 1.2),
+                SKAction.scaleX(to: 1.0, y: 1.0, duration: 1.2)      // breathe out
+            ])
         ])
+        bob.timingMode = .easeInEaseOut
         run(SKAction.repeatForever(bob), withKey: "idle")
 
-        // Subtle sway
+        // Gentle asymmetric sway — feels alive
         let sway = SKAction.sequence([
-            SKAction.rotate(byAngle: 0.02, duration: 2.0),
-            SKAction.rotate(byAngle: -0.02, duration: 2.0)
+            SKAction.rotate(byAngle:  0.035, duration: 1.8),
+            SKAction.rotate(byAngle: -0.060, duration: 2.4),
+            SKAction.rotate(byAngle:  0.025, duration: 1.8)
         ])
         run(SKAction.repeatForever(sway), withKey: "sway")
+
+        // Occasional weight shift — random pause between
+        let weightShift = SKAction.sequence([
+            SKAction.wait(forDuration: TimeInterval.random(in: 3.5...7.0)),
+            SKAction.group([
+                SKAction.moveBy(x: isMirrored ? 5 : -5, y: 0, duration: 0.3),
+                SKAction.scaleX(to: 0.96, y: 1.02, duration: 0.3)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: isMirrored ? -5 : 5, y: 0, duration: 0.4),
+                SKAction.scale(to: 1.0, duration: 0.4)
+            ])
+        ])
+        run(SKAction.repeatForever(weightShift), withKey: "weightShift")
     }
 
     func stopIdle() {
         removeAction(forKey: "idle")
         removeAction(forKey: "sway")
+        removeAction(forKey: "weightShift")
+        // Snap back to neutral scale/rotation
+        run(SKAction.group([
+            SKAction.scale(to: 1.0, duration: 0.15),
+            SKAction.rotate(toAngle: 0, duration: 0.15)
+        ]))
     }
 }

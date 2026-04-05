@@ -11,165 +11,203 @@ class AnnouncementNode: SKNode {
 
     // MARK: - Round Announcement
 
-    /// Shows "第N回合" or "最终决战!" with dramatic zoom-in effect
+    /// Shows "第N回合" or "最终决战!" with dramatic zoom-in and screen flash.
     static func showRoundAnnouncement(round: Int, maxRounds: Int, in scene: SKScene) {
         let text: String
         let color: SKColor
+        let isFinal = (round == maxRounds)
 
-        if round == maxRounds {
+        if isFinal {
             text = "最终决战!"
             color = SKColor(red: 1.0, green: 0.0, blue: 0.3, alpha: 1.0)
         } else if round >= maxRounds - 2 {
-            text = "第\(round)回合 ⚡️"
+            text = "第\(round)回合 ⚡"
             color = SKColor(red: 1.0, green: 0.5, blue: 0.0, alpha: 1.0)
         } else {
             text = "第\(round)回合"
             color = SKColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.9)
         }
 
-        let label = SKLabelNode(text: text)
-        label.fontSize = min(scene.size.width, scene.size.height) * 0.08
-        label.fontColor = color
-        label.fontName = "Helvetica-Bold"
-        label.position = CGPoint(x: scene.size.width / 2, y: scene.size.height / 2)
-        label.zPosition = 200
-        label.setScale(0.1)
-        label.alpha = 0
-        scene.addChild(label)
+        let cx = scene.size.width / 2
+        let cy = scene.size.height / 2
+        let fontSize = min(scene.size.width, scene.size.height) * 0.09
 
-        // Glow behind
+        // Glow shadow (slightly larger, behind)
         let glow = SKLabelNode(text: text)
-        glow.fontSize = label.fontSize
-        glow.fontColor = color.withAlphaComponent(0.3)
+        glow.fontSize = fontSize
+        glow.fontColor = color
         glow.fontName = "Helvetica-Bold"
-        glow.position = label.position
+        glow.position = CGPoint(x: cx, y: cy)
         glow.zPosition = 199
-        glow.setScale(0.1)
         glow.alpha = 0
+        glow.setScale(0.05)
         scene.addChild(glow)
 
-        // Zoom in
-        let zoomIn = SKAction.group([
-            SKAction.scale(to: 1.2, duration: 0.3),
-            SKAction.fadeAlpha(to: 1.0, duration: 0.2)
+        // Main label
+        let label = SKLabelNode(text: text)
+        label.fontSize = fontSize
+        label.fontColor = color
+        label.fontName = "Helvetica-Bold"
+        label.position = CGPoint(x: cx, y: cy)
+        label.zPosition = 200
+        label.alpha = 0
+        label.setScale(0.05)
+        scene.addChild(label)
+
+        // Slam in — overshoot then settle
+        let slamIn = SKAction.group([
+            SKAction.scale(to: 1.25, duration: 0.18),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.10)
         ])
-        zoomIn.timingMode = .easeOut
+        slamIn.timingMode = .easeOut
+        let settle = SKAction.scale(to: 1.0, duration: 0.14)
+        settle.timingMode = .easeInEaseOut
 
-        // Hold
-        let hold = SKAction.wait(forDuration: 0.6)
+        let hold = SKAction.wait(forDuration: isFinal ? 1.0 : 0.65)
 
-        // Zoom out and fade
         let zoomOut = SKAction.group([
-            SKAction.scale(to: 1.8, duration: 0.3),
-            SKAction.fadeAlpha(to: 0.0, duration: 0.3)
+            SKAction.scale(to: 2.0, duration: 0.30),
+            SKAction.fadeAlpha(to: 0.0, duration: 0.30)
         ])
         zoomOut.timingMode = .easeIn
 
-        let sequence = SKAction.sequence([zoomIn, hold, zoomOut, SKAction.removeFromParent()])
-        label.run(sequence)
+        label.run(SKAction.sequence([slamIn, settle, hold,
+                                     isFinal ? AnimationKit.wobble(intensity: 0.12, steps: 5) : SKAction.wait(forDuration: 0),
+                                     zoomOut, SKAction.removeFromParent()]))
+
         glow.run(SKAction.sequence([
-            SKAction.group([
-                SKAction.scale(to: 1.4, duration: 0.3),
-                SKAction.fadeAlpha(to: 0.4, duration: 0.2)
-            ]),
+            SKAction.group([SKAction.scale(to: 1.55, duration: 0.18),
+                            SKAction.fadeAlpha(to: 0.35, duration: 0.10)]),
+            SKAction.scale(to: 1.3, duration: 0.14),
             hold,
-            SKAction.group([
-                SKAction.scale(to: 2.0, duration: 0.3),
-                SKAction.fadeAlpha(to: 0.0, duration: 0.3)
-            ]),
+            SKAction.group([SKAction.scale(to: 2.5, duration: 0.30),
+                            SKAction.fadeAlpha(to: 0.0, duration: 0.30)]),
             SKAction.removeFromParent()
         ]))
+
+        // Screen flash on entry
+        AnimationKit.chromaFlash(color: color, intensity: isFinal ? 0.35 : 0.20, in: scene)
+
+        // Extra particle burst on final round
+        if isFinal {
+            AnimationKit.particleBurst(
+                at: CGPoint(x: cx, y: cy),
+                colors: [color, .white, .orange],
+                count: 20, radius: 4, spread: 110, zPosition: 195, in: scene
+            )
+        }
     }
 
     // MARK: - Combo Announcement
 
-    /// Shows streak combo text with fire effect
+    /// Shows streak combo text with spring pop and fire particles for high streaks.
     static func showCombo(streak: Int, in scene: SKScene) {
         guard streak >= 2 else { return }
 
         let fires = String(repeating: "🔥", count: min(streak, 5))
         let text = "连续\(streak)次! \(fires)"
+        let color = SKColor(red: 1.0, green: 0.55, blue: 0.0, alpha: 1.0)
 
         let label = SKLabelNode(text: text)
-        label.fontSize = min(scene.size.width, scene.size.height) * 0.05
-        label.fontColor = SKColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1.0)
+        label.fontSize = min(scene.size.width, scene.size.height) * 0.055
+        label.fontColor = color
         label.fontName = "Helvetica-Bold"
         label.position = CGPoint(x: scene.size.width / 2, y: scene.size.height * 0.65)
         label.zPosition = 200
-        label.alpha = 0
         scene.addChild(label)
 
-        let appear = SKAction.group([
-            SKAction.fadeAlpha(to: 1.0, duration: 0.2),
-            SKAction.moveBy(x: 0, y: 20, duration: 0.3)
-        ])
-        let hold = SKAction.wait(forDuration: 1.0)
-        let disappear = SKAction.group([
-            SKAction.fadeAlpha(to: 0.0, duration: 0.4),
-            SKAction.moveBy(x: 0, y: 15, duration: 0.4)
-        ])
+        AnimationKit.springPopIn(label, delay: 0, fromScale: 0.3)
 
-        label.run(SKAction.sequence([appear, hold, disappear, SKAction.removeFromParent()]))
+        let hold = SKAction.wait(forDuration: 1.0)
+        let rise = SKAction.moveBy(x: 0, y: 20, duration: 0.5)
+        rise.timingMode = .easeOut
+        let fade = SKAction.fadeOut(withDuration: 0.5)
+        label.run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.38 + 1.0),   // pop-in duration + hold
+            SKAction.group([rise, fade]),
+            SKAction.removeFromParent()
+        ]))
+
+        // Wobble on very high streaks
+        if streak >= 4 {
+            label.run(SKAction.sequence([
+                SKAction.wait(forDuration: 0.38),
+                AnimationKit.wobble(intensity: 0.14, steps: 5)
+            ]))
+        }
+
+        // Burst from above for streaks ≥ 3
+        if streak >= 3 {
+            AnimationKit.particleBurst(
+                at: CGPoint(x: scene.size.width / 2, y: scene.size.height * 0.7),
+                colors: [color, .yellow, .white],
+                count: 12, radius: 2.5, spread: 60, zPosition: 195, in: scene
+            )
+        }
     }
 
     // MARK: - Drink Announcement
 
-    /// Shows "喝N杯!" with dramatic effect
+    /// Shows "喝N杯!" with slam-in, wobble, and chromatic flash.
     static func showDrinkCall(count: Int, isPlayer: Bool, in scene: SKScene) {
         let beers = String(repeating: "🍺", count: min(count, 5))
         let who = isPlayer ? "你" : "对手"
         let text = "\(who)喝\(count)杯! \(beers)"
+        let color: SKColor = isPlayer
+            ? SKColor(red: 1.0, green: 0.15, blue: 0.15, alpha: 1.0)
+            : SKColor(red: 0.15, green: 1.0, blue: 0.4, alpha: 1.0)
 
         let label = SKLabelNode(text: text)
-        label.fontSize = min(scene.size.width, scene.size.height) * 0.06
-        label.fontColor = isPlayer ? SKColor.red : SKColor.green
+        label.fontSize = min(scene.size.width, scene.size.height) * 0.065
+        label.fontColor = color
         label.fontName = "Helvetica-Bold"
-        label.position = CGPoint(x: scene.size.width / 2, y: scene.size.height * 0.55)
+        label.position = CGPoint(x: scene.size.width / 2, y: scene.size.height * 0.52)
         label.zPosition = 200
-        label.setScale(0.5)
+        label.setScale(0.05)
         label.alpha = 0
         scene.addChild(label)
 
-        // Slam in effect
+        // Explosive slam-in — 0→1.45→1.0
         let slamIn = SKAction.group([
-            SKAction.scale(to: 1.3, duration: 0.15),
-            SKAction.fadeAlpha(to: 1.0, duration: 0.1)
+            SKAction.scale(to: 1.45, duration: 0.14),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.09)
         ])
-        let settle = SKAction.scale(to: 1.0, duration: 0.1)
-        let hold = SKAction.wait(forDuration: 1.5)
+        slamIn.timingMode = .easeOut
+        let settle = SKAction.scale(to: 1.0, duration: 0.12)
+        settle.timingMode = .easeInEaseOut
+
+        let wobble = AnimationKit.wobble(intensity: 0.18, steps: 6)
+        let hold = SKAction.wait(forDuration: 1.4)
         let fadeOut = SKAction.group([
-            SKAction.fadeAlpha(to: 0.0, duration: 0.5),
-            SKAction.moveBy(x: 0, y: 20, duration: 0.5)
+            SKAction.fadeAlpha(to: 0.0, duration: 0.4),
+            SKAction.moveBy(x: 0, y: 18, duration: 0.4)
         ])
 
-        label.run(SKAction.sequence([slamIn, settle, hold, fadeOut, SKAction.removeFromParent()]))
+        label.run(SKAction.sequence([slamIn, settle, wobble, hold, fadeOut, SKAction.removeFromParent()]))
+
+        // Chromatic flash matching player/opponent
+        AnimationKit.chromaFlash(color: color, intensity: 0.28, in: scene)
+
+        // Bubble particles near label
+        AnimationKit.particleBurst(
+            at: CGPoint(x: scene.size.width / 2, y: scene.size.height * 0.52),
+            colors: [color, .white, SKColor(red: 1.0, green: 0.85, blue: 0.1, alpha: 1)],
+            count: 10, radius: 2.5, spread: 50, zPosition: 195, in: scene
+        )
     }
 
     // MARK: - Phase Flash
 
-    /// Brief screen flash for phase transitions
+    /// Brief screen flash for phase transitions.
     static func flashScreen(color: SKColor, in scene: SKScene) {
-        let flash = SKShapeNode(rect: CGRect(origin: .zero, size: scene.size))
-        flash.fillColor = color
-        flash.strokeColor = .clear
-        flash.alpha = 0.0
-        flash.zPosition = 150
-        scene.addChild(flash)
-
-        flash.run(SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.3, duration: 0.08),
-            SKAction.fadeAlpha(to: 0.0, duration: 0.25),
-            SKAction.removeFromParent()
-        ]))
+        AnimationKit.chromaFlash(color: color, intensity: 0.22, in: scene)
     }
 
     // MARK: - Streak Border Glow
 
-    /// Shows glowing border that intensifies with streak count
+    /// Shows glowing border that intensifies with streak count.
     static func updateStreakBorder(streak: Int, in scene: SKScene) {
-        // Remove existing
         scene.childNode(withName: "streakBorder")?.removeFromParent()
-
         guard streak >= 2 else { return }
 
         let intensity = min(CGFloat(streak) / 5.0, 1.0)
@@ -184,35 +222,17 @@ class AnnouncementNode: SKNode {
         border.name = "streakBorder"
         scene.addChild(border)
 
-        // Pulse
         let pulse = SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.5, duration: 0.5),
-            SKAction.fadeAlpha(to: 1.0, duration: 0.5)
+            SKAction.fadeAlpha(to: 0.5, duration: 0.45),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.45)
         ])
         border.run(SKAction.repeatForever(pulse))
     }
 
     // MARK: - Score Pop
 
-    /// Animated score change — number pops and settles
+    /// Animated score change — number floats up and fades.
     static func showScorePop(text: String, at position: CGPoint, color: SKColor, in scene: SKScene) {
-        let label = SKLabelNode(text: text)
-        label.fontSize = 24
-        label.fontColor = color
-        label.fontName = "Helvetica-Bold"
-        label.position = position
-        label.zPosition = 200
-        scene.addChild(label)
-
-        let popUp = SKAction.group([
-            SKAction.moveBy(x: 0, y: 30, duration: 0.4),
-            SKAction.sequence([
-                SKAction.scale(to: 1.5, duration: 0.15),
-                SKAction.scale(to: 1.0, duration: 0.25)
-            ])
-        ])
-        let fade = SKAction.fadeAlpha(to: 0.0, duration: 0.4)
-
-        label.run(SKAction.sequence([popUp, fade, SKAction.removeFromParent()]))
+        AnimationKit.floatUp(text: text, at: position, color: color, fontSize: 26, in: scene)
     }
 }

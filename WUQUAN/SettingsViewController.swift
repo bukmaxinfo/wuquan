@@ -42,6 +42,9 @@ class SettingsViewController: UIViewController {
     private var difficultyTitleLabel: UILabel!
     private var difficultySegment: UISegmentedControl!
 
+    // Store anchor ref
+    private var gameCenterAchievementsBtn: UIButton!
+
     // Music state
     private var selectedMusicURL: URL?
     private var isPlaying = false
@@ -61,13 +64,15 @@ class SettingsViewController: UIViewController {
     private func setupUI() {
         // Setup programmatically since we don't have XIB
         view.backgroundColor = UIColor.black.withAlphaComponent(0.7)
-        
+
         createBackgroundView()
         createSettingsPanel()
         createTitleAndCloseButton()
         createMusicSection()
         createVolumeSection()
         createDifficultySection()
+        createGameCenterSection()
+        createStoreSection()
     }
     
     private func createBackgroundView() {
@@ -83,7 +88,7 @@ class SettingsViewController: UIViewController {
     
     private func createSettingsPanel() {
         let panelWidth: CGFloat = min(view.bounds.width * 0.8, 400)
-        let panelHeight: CGFloat = min(view.bounds.height * 0.7, 500)
+        let panelHeight: CGFloat = min(view.bounds.height * 0.90, 740)
         
         settingsPanel = UIView()
         settingsPanel.backgroundColor = UIColor(red: 0.15, green: 0.15, blue: 0.25, alpha: 0.95)
@@ -276,6 +281,105 @@ class SettingsViewController: UIViewController {
         guard let diff = Difficulty(rawValue: sender.selectedSegmentIndex) else { return }
         UserDefaults.standard.set(diff.rawValue, forKey: "difficulty")
         delegate?.settingsDidChangeDifficulty(difficulty: diff)
+    }
+
+    private func createGameCenterSection() {
+        let sectionLabel = UILabel()
+        sectionLabel.text = "🏆 Game Center"
+        sectionLabel.font = UIFont.boldSystemFont(ofSize: 16)
+        sectionLabel.textColor = .yellow
+        sectionLabel.translatesAutoresizingMaskIntoConstraints = false
+        settingsPanel.addSubview(sectionLabel)
+
+        let leaderboardBtn = makeGameCenterButton(
+            title: "排行榜",
+            icon: "📊",
+            color: UIColor(red: 0.2, green: 0.5, blue: 0.9, alpha: 0.85)
+        )
+        leaderboardBtn.addTarget(self, action: #selector(leaderboardTapped), for: .touchUpInside)
+        settingsPanel.addSubview(leaderboardBtn)
+
+        let achievementsBtn = makeGameCenterButton(
+            title: "成就",
+            icon: "🎖️",
+            color: UIColor(red: 0.6, green: 0.35, blue: 0.85, alpha: 0.85)
+        )
+        achievementsBtn.addTarget(self, action: #selector(achievementsTapped), for: .touchUpInside)
+        settingsPanel.addSubview(achievementsBtn)
+        gameCenterAchievementsBtn = achievementsBtn
+
+        NSLayoutConstraint.activate([
+            sectionLabel.topAnchor.constraint(equalTo: difficultySegment.bottomAnchor, constant: 28),
+            sectionLabel.centerXAnchor.constraint(equalTo: settingsPanel.centerXAnchor),
+
+            leaderboardBtn.topAnchor.constraint(equalTo: sectionLabel.bottomAnchor, constant: 14),
+            leaderboardBtn.leadingAnchor.constraint(equalTo: settingsPanel.leadingAnchor, constant: 24),
+            leaderboardBtn.trailingAnchor.constraint(equalTo: settingsPanel.centerXAnchor, constant: -8),
+            leaderboardBtn.heightAnchor.constraint(equalToConstant: 44),
+
+            achievementsBtn.topAnchor.constraint(equalTo: sectionLabel.bottomAnchor, constant: 14),
+            achievementsBtn.leadingAnchor.constraint(equalTo: settingsPanel.centerXAnchor, constant: 8),
+            achievementsBtn.trailingAnchor.constraint(equalTo: settingsPanel.trailingAnchor, constant: -24),
+            achievementsBtn.heightAnchor.constraint(equalToConstant: 44)
+        ])
+    }
+
+    private func makeGameCenterButton(title: String, icon: String, color: UIColor) -> UIButton {
+        let btn = UIButton(type: .system)
+        btn.setTitle("\(icon)  \(title)", for: .normal)
+        btn.titleLabel?.font = UIFont.boldSystemFont(ofSize: 15)
+        btn.setTitleColor(.white, for: .normal)
+        btn.backgroundColor = color
+        btn.layer.cornerRadius = 10
+        btn.layer.borderWidth = 1.5
+        btn.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        return btn
+    }
+
+    @objc private func leaderboardTapped() {
+        GameCenterManager.shared.showLeaderboard(from: self)
+    }
+
+    @objc private func achievementsTapped() {
+        // Show local achievements screen; it has a link to native GC achievements inside
+        let achVC = AchievementsViewController()
+        achVC.modalPresentationStyle = .overFullScreen
+        achVC.modalTransitionStyle = .crossDissolve
+        present(achVC, animated: true)
+    }
+
+    private func createStoreSection() {
+        let sectionLabel = UILabel()
+        sectionLabel.text = "🛍️ 商店"
+        sectionLabel.font = UIFont.boldSystemFont(ofSize: 16)
+        sectionLabel.textColor = UIColor(red: 0.5, green: 1.0, blue: 0.8, alpha: 1)
+        sectionLabel.translatesAutoresizingMaskIntoConstraints = false
+        settingsPanel.addSubview(sectionLabel)
+
+        let storeBtn = makeGameCenterButton(
+            title: "打开商店  🪙\(AccessoryStore.shared.coinBalance)",
+            icon: "🛍️",
+            color: UIColor(red: 0.12, green: 0.45, blue: 0.35, alpha: 0.9)
+        )
+        storeBtn.addTarget(self, action: #selector(storeTapped), for: .touchUpInside)
+        settingsPanel.addSubview(storeBtn)
+
+        NSLayoutConstraint.activate([
+            sectionLabel.topAnchor.constraint(equalTo: gameCenterAchievementsBtn.bottomAnchor, constant: 24),
+            sectionLabel.centerXAnchor.constraint(equalTo: settingsPanel.centerXAnchor),
+
+            storeBtn.topAnchor.constraint(equalTo: sectionLabel.bottomAnchor, constant: 12),
+            storeBtn.leadingAnchor.constraint(equalTo: settingsPanel.leadingAnchor, constant: 24),
+            storeBtn.trailingAnchor.constraint(equalTo: settingsPanel.trailingAnchor, constant: -24),
+            storeBtn.heightAnchor.constraint(equalToConstant: 44)
+        ])
+    }
+
+    @objc private func storeTapped() {
+        let storeVC = StoreViewController()
+        storeVC.modalPresentationStyle = .fullScreen
+        present(storeVC, animated: true)
     }
 
     private func animateAppearance() {

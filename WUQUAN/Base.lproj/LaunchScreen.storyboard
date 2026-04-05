@@ -1,8 +1,10 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="13122.16" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21701" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
+    <device id="retina6_12" orientation="portrait" appearance="dark"/>
     <dependencies>
-        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="13104.12"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="21678"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -11,10 +13,73 @@
             <objects>
                 <viewController id="01J-lp-oVM" sceneMemberID="viewController">
                     <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
-                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                        <color key="backgroundColor" xcode11CocoaTouchSystemColor="systemBackgroundColor" cocoaTouchSystemColor="whiteColor"/>
+                        <subviews>
+                            <!-- Dark purple background fill -->
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="bg-view-01">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                                <color key="backgroundColor" red="0.05" green="0.02" blue="0.12" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                            </view>
+
+                            <!-- Horizon glow bar -->
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="horizon-bar">
+                                <rect key="frame" x="0.0" y="480" width="393" height="3"/>
+                                <color key="backgroundColor" red="1.0" green="0.0" blue="0.78" alpha="0.85" colorSpace="custom" customColorSpace="sRGB"/>
+                            </view>
+
+                            <!-- Main title: 舞拳 -->
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="舞拳" textAlignment="center" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="title-label">
+                                <rect key="frame" x="47" y="320" width="299" height="100"/>
+                                <fontDescription key="fontDescription" type="boldSystem" pointSize="88"/>
+                                <color key="textColor" red="1.0" green="1.0" blue="1.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                            </label>
+
+                            <!-- Subtitle: WUQUAN -->
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="WUQUAN" textAlignment="center" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="subtitle-label">
+                                <rect key="frame" x="97" y="428" width="199" height="30"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="22"/>
+                                <color key="textColor" red="0.0" green="0.87" blue="1.0" alpha="0.9" colorSpace="custom" customColorSpace="sRGB"/>
+                            </label>
+
+                            <!-- Tagline -->
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Dance · Battle · Drink" textAlignment="center" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="tagline-label">
+                                <rect key="frame" x="67" y="516" width="259" height="22"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="16"/>
+                                <color key="textColor" red="1.0" green="0.0" blue="0.78" alpha="0.8" colorSpace="custom" customColorSpace="sRGB"/>
+                            </label>
+                        </subviews>
+
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
+
+                        <!-- Background fills full screen -->
+                        <constraints>
+                            <constraint firstItem="bg-view-01" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="bg-top"/>
+                            <constraint firstItem="bg-view-01" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="bg-lead"/>
+                            <constraint firstAttribute="trailing" secondItem="bg-view-01" secondAttribute="trailing" id="bg-trail"/>
+                            <constraint firstAttribute="bottom" secondItem="bg-view-01" secondAttribute="bottom" id="bg-bot"/>
+
+                            <!-- Horizon bar -->
+                            <constraint firstItem="horizon-bar" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="hz-lead"/>
+                            <constraint firstAttribute="trailing" secondItem="horizon-bar" secondAttribute="trailing" id="hz-trail"/>
+                            <constraint firstItem="horizon-bar" firstAttribute="height" constant="3" id="hz-height"/>
+                            <constraint firstItem="horizon-bar" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" multiplier="1.15" id="hz-cy"/>
+
+                            <!-- Title centered horizontally, positioned in upper half -->
+                            <constraint firstItem="title-label" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="title-cx"/>
+                            <constraint firstItem="title-label" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" multiplier="0.82" id="title-cy"/>
+                            <constraint firstItem="title-label" firstAttribute="width" secondItem="Ze5-6b-2t3" secondAttribute="width" multiplier="0.8" id="title-w"/>
+
+                            <!-- Subtitle below title -->
+                            <constraint firstItem="subtitle-label" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="sub-cx"/>
+                            <constraint firstItem="subtitle-label" firstAttribute="top" secondItem="title-label" secondAttribute="bottom" constant="4" id="sub-top"/>
+
+                            <!-- Tagline below horizon bar -->
+                            <constraint firstItem="tagline-label" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="tag-cx"/>
+                            <constraint firstItem="tagline-label" firstAttribute="top" secondItem="horizon-bar" secondAttribute="bottom" constant="24" id="tag-top"/>
+                        </constraints>
+
+                        <color key="backgroundColor" red="0.05" green="0.02" blue="0.12" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                     </view>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>

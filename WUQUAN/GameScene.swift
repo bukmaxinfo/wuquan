@@ -78,6 +78,11 @@ enum Difficulty: Int, CaseIterable {
     }
 }
 
+enum GameMode {
+    case vsAI
+    case localMultiplayer
+}
+
 struct GameRules {
     static func evaluateRound(playerGesture: Gesture, aiGesture: Gesture,
                               playerDirection: Direction, aiDirection: Direction) -> RoundResult {
@@ -110,6 +115,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     // Character styles (set before scene is presented)
     var playerStyle: CharacterStyle = .sportyGuy
     var opponentStyle: CharacterStyle = .nightclubPrince
+    var gameMode: GameMode = .vsAI
+    var gameTheme: GameTheme = .neon
+    var playerColorVariant: CharacterColorVariant = CharacterColorVariant.all[0]
+    var opponentColorVariant: CharacterColorVariant = CharacterColorVariant.all[0]
     
     private var lastUpdateTime : TimeInterval = 0
     private var gamePhase: GamePhase = .handshake(step: 1)
@@ -139,6 +148,12 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var bestStreakThisGame = 0
     private var gestureCountsThisGame: [Gesture: Int] = [.rock: 0, .paper: 0, .scissors: 0]
     private var isDismissingTutorial = false
+
+    // Local multiplayer state
+    private var p1GestureChosen = false
+    private var p2GestureChosen = false
+    private var p1DirectionChosen = false
+    private var p2DirectionChosen = false
     private var totalGamesPlayed: Int {
         get { UserDefaults.standard.integer(forKey: "totalGamesPlayed") }
         set { UserDefaults.standard.set(newValue, forKey: "totalGamesPlayed") }
@@ -146,6 +161,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private var totalWins: Int {
         get { UserDefaults.standard.integer(forKey: "totalWins") }
         set { UserDefaults.standard.set(newValue, forKey: "totalWins") }
+    }
+    private var totalRoundsEver: Int {
+        get { UserDefaults.standard.integer(forKey: "totalRoundsEver") }
+        set { UserDefaults.standard.set(newValue, forKey: "totalRoundsEver") }
     }
     private var gameScore: (player: Int, ai: Int) = (
         player: UserDefaults.standard.integer(forKey: "playerScore"),
@@ -160,6 +179,9 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     // Characters
     private var playerCharacter: SpriteCharacterNode?
     private var characterNode: SpriteCharacterNode?
+
+    // Coin HUD
+    private var coinHUDLabel: SKLabelNode?
 
     // Settings System
     private var settingsOverlay: SKNode?
@@ -239,10 +261,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func setupUI() {
-        backgroundColor = SKColor(red: 0.05, green: 0.02, blue: 0.1, alpha: 1.0)
+        backgroundColor = gameTheme.backgroundColor
 
-        // Neon grid floor background
-        let neonFloor = NeonFloorNode(size: size)
+        // Neon grid floor background (themed)
+        let neonFloor = NeonFloorNode(size: size, theme: gameTheme)
         neonFloor.zPosition = -10
         addChild(neonFloor)
 
@@ -332,6 +354,26 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         
         // Create music button in top-right corner of content area
         createMusicControl(contentRect: contentRect)
+
+        // Coin HUD — bottom-left corner
+        setupCoinHUD(in: contentRect)
+    }
+
+    private func setupCoinHUD(in contentRect: CGRect) {
+        let label = SKLabelNode(text: "🪙 \(AccessoryStore.shared.coinBalance)")
+        label.fontSize = 13
+        label.fontColor = SKColor(red: 1.0, green: 0.85, blue: 0.15, alpha: 0.9)
+        label.fontName = "Helvetica-Bold"
+        label.horizontalAlignmentMode = .left
+        label.position = CGPoint(x: contentRect.minX + 12, y: contentRect.minY + 8)
+        label.zPosition = 50
+        label.name = "coinHUDLabel"
+        addChild(label)
+        coinHUDLabel = label
+    }
+
+    func updateCoinHUD() {
+        coinHUDLabel?.text = "🪙 \(AccessoryStore.shared.coinBalance)"
     }
     
     private func createGameHeader(in headerZone: CGRect) {
@@ -417,7 +459,9 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         pChar.position = CGPoint(x: playerX, y: centerY - charHeight * 0.1)
         addChild(pChar)
         playerCharacter = pChar
+        pChar.applyColorVariant(playerColorVariant)
         pChar.animateIdle()
+        pChar.equipAccessories()
 
         // Player gesture display
         playerGestureLabel = SKLabelNode(text: "")
@@ -447,7 +491,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         ])))
 
         // Opponent name tag — neon red/magenta
-        let aiLabel = SKLabelNode(text: opponentStyle.name)
+        let aiLabel = SKLabelNode(text: gameMode == .localMultiplayer ? "玩家 2" : opponentStyle.name)
         aiLabel.fontSize = 14
         aiLabel.fontColor = SKColor(red: 1.0, green: 0.2, blue: 0.5, alpha: 0.9)
         aiLabel.fontName = "Helvetica-Bold"
@@ -459,7 +503,9 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         character.position = CGPoint(x: aiX, y: centerY - charHeight * 0.1)
         addChild(character)
         characterNode = character
+        character.applyColorVariant(opponentColorVariant)
         character.animateIdle()
+        character.equipAccessories()
 
         // AI gesture display
         aiGestureLabel = SKLabelNode(text: "")
@@ -653,16 +699,26 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func hideGameButtons() {
         hiddenGameButtons.removeAll()
         
-        // Hide gesture buttons if they exist
-        let gestureButtons = children.filter { $0.name?.hasPrefix("gesture_") == true }
+        // Hide gesture buttons if they exist (vsAI and 2P variants)
+        let gestureButtons = children.filter {
+            $0.name?.hasPrefix("gesture_") == true ||
+            $0.name?.hasPrefix("p1_gesture_") == true ||
+            $0.name?.hasPrefix("p2_gesture_") == true ||
+            $0.name == "p2p_divider"
+        }
         for button in gestureButtons {
             button.alpha = 0.0
             button.isHidden = true
             hiddenGameButtons.append(button)
         }
-        
-        // Hide direction buttons if they exist
-        let directionButtons = children.filter { $0.name?.hasPrefix("direction_") == true }
+
+        // Hide direction buttons if they exist (vsAI and 2P variants)
+        let directionButtons = children.filter {
+            $0.name?.hasPrefix("direction_") == true ||
+            $0.name?.hasPrefix("p1_direction_") == true ||
+            $0.name?.hasPrefix("p2_direction_") == true ||
+            $0.name == "p2p_dir_divider"
+        }
         for button in directionButtons {
             button.alpha = 0.0
             button.isHidden = true
@@ -728,13 +784,19 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
                 startFreeMovementPhase()
             }
         case .gestureSelection:
-            // Show gesture buttons if they should be visible
-            if children.filter({ $0.name?.hasPrefix("gesture_") == true }).isEmpty {
+            // Show gesture buttons if they should be visible (check both single and multiplayer prefixes)
+            let hasGestureButtons = gameMode == .localMultiplayer
+                ? children.contains(where: { $0.name?.hasPrefix("p1_gesture_") == true })
+                : children.contains(where: { $0.name?.hasPrefix("gesture_") == true })
+            if !hasGestureButtons {
                 showGestureButtons()
             }
         case .directionPointing:
-            // Show direction buttons if they should be visible
-            if children.filter({ $0.name?.hasPrefix("direction_") == true }).isEmpty {
+            // Show direction buttons if they should be visible (check both single and multiplayer prefixes)
+            let hasDirectionButtons = gameMode == .localMultiplayer
+                ? children.contains(where: { $0.name?.hasPrefix("p1_direction_") == true })
+                : children.contains(where: { $0.name?.hasPrefix("direction_") == true })
+            if !hasDirectionButtons {
                 showDirectionButtons()
             }
         case .result:
@@ -978,53 +1040,52 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     private func startGestureSelectionPhase() {
         gamePhase = .gestureSelection
         phaseLabel?.text = "选择手势"
-        instructionLabel?.text = "点击选择你的手势"
-        
-        // Return to normal tempo for decision phase
         adjustMusicTempo(1.0)
-        
-        // Show gesture options
         showGestureButtons()
 
-        // Enhanced AI logic with strategy
-        aiGesture = chooseAIGesture()
-
-        // Character enters thinking pose
-        characterNode?.setExpression(.smirk)
-
-        // AI tell — character briefly hints at chosen gesture
-        if let aiG = aiGesture {
-            let tellDelay: TimeInterval
-            let tellDuration: TimeInterval
-            switch difficulty {
-            case .easy:
-                tellDelay = 0.5
-                tellDuration = 0.8  // Obvious tell
-            case .medium:
-                tellDelay = 0.3
-                tellDuration = 0.4  // Subtle tell
-            case .hard:
-                // 50% chance of bluff on hard
-                tellDelay = 0.2
-                tellDuration = 0.3
+        if gameMode == .localMultiplayer {
+            // Both players pick simultaneously — reset 2P state
+            p1GestureChosen = false
+            p2GestureChosen = false
+            playerGesture = nil
+            aiGesture = nil
+            instructionLabel?.text = "双人同时选择手势！"
+            playerCharacter?.setExpression(.neutral)
+            characterNode?.setExpression(.neutral)
+        } else {
+            instructionLabel?.text = "点击选择你的手势"
+            aiGesture = chooseAIGesture()
+            characterNode?.setExpression(.smirk)
+            if let aiG = aiGesture {
+                let tellDelay: TimeInterval
+                let tellDuration: TimeInterval
+                switch difficulty {
+                case .easy:   tellDelay = 0.5; tellDuration = 0.8
+                case .medium: tellDelay = 0.3; tellDuration = 0.4
+                case .hard:   tellDelay = 0.2; tellDuration = 0.3
+                }
+                let gestureToShow = (difficulty == .hard && Bool.random()) ? Gesture.allCases.randomElement() ?? .rock : aiG
+                characterNode?.animateTell(gestureToShow, delay: tellDelay, duration: tellDuration)
             }
-            let gestureToShow = (difficulty == .hard && Bool.random()) ? Gesture.allCases.randomElement() ?? .rock : aiG
-            characterNode?.animateTell(gestureToShow, delay: tellDelay, duration: tellDuration)
         }
     }
     
     private func showGestureButtons() {
+        if gameMode == .localMultiplayer {
+            showGestureButtonsForP2P()
+            return
+        }
+
         let gestures: [Gesture] = [.rock, .paper, .scissors]
-        // Dynamic button positioning
         let screenHeight = size.height
         let screenWidth = size.width
-        let buttonAreaY = screenHeight * 0.3  // 30% from bottom
+        let buttonAreaY = screenHeight * 0.3
         let buttonSize = min(screenWidth, screenHeight) * 0.08
         let spacing = screenWidth * 0.2
         let startX = screenWidth/2 - CGFloat(gestures.count - 1) * spacing / 2
-        
+
         for (index, gesture) in gestures.enumerated() {
-            // Neon button background
+            let delay = TimeInterval(index) * 0.07
             let buttonBg = SKShapeNode(circleOfRadius: buttonSize*0.7)
             buttonBg.fillColor = SKColor(red: 0.1, green: 0.05, blue: 0.2, alpha: 0.85)
             buttonBg.strokeColor = SKColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.8)
@@ -1033,20 +1094,83 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             buttonBg.position = CGPoint(x: startX + CGFloat(index) * spacing, y: buttonAreaY)
             buttonBg.name = "gesture_\(gesture)"
             addChild(buttonBg)
-            
-            // Dynamic emoji label
+            AnimationKit.springPopIn(buttonBg, delay: delay)
+
             let button = SKLabelNode(text: gesture.emoji)
             button.fontSize = buttonSize
             button.position = CGPoint(x: startX + CGFloat(index) * spacing, y: buttonAreaY - buttonSize*0.25)
             button.name = "gesture_\(gesture)"
             addChild(button)
+            AnimationKit.springPopIn(button, delay: delay + 0.04)
         }
 
-        // Start selection timer
         startSelectionTimer(buttonAreaY: buttonAreaY + buttonSize * 1.5) {
             let randomGesture = Gesture.allCases.randomElement() ?? .rock
             self.selectGesture(randomGesture)
             self.instructionLabel?.text = "超时！随机选择：\(randomGesture.emoji)"
+        }
+    }
+
+    private func showGestureButtonsForP2P() {
+        let gestures: [Gesture] = [.rock, .paper, .scissors]
+        let screenWidth = size.width
+        let screenHeight = size.height
+        let buttonAreaY = screenHeight * 0.3
+        let buttonSize = min(screenWidth, screenHeight) * 0.055
+        let halfWidth = screenWidth / 2
+        let spacing = halfWidth * 0.28
+
+        // Divider line
+        let divider = SKShapeNode()
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: halfWidth, y: buttonAreaY - buttonSize * 2))
+        path.addLine(to: CGPoint(x: halfWidth, y: buttonAreaY + buttonSize * 2))
+        divider.path = path
+        divider.strokeColor = SKColor(white: 1.0, alpha: 0.15)
+        divider.lineWidth = 1
+        divider.name = "p2p_divider"
+        addChild(divider)
+
+        // Player labels
+        let p1HeaderLabel = SKLabelNode(text: "玩家 1")
+        p1HeaderLabel.fontSize = 13
+        p1HeaderLabel.fontColor = SKColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 0.9)
+        p1HeaderLabel.fontName = "Helvetica-Bold"
+        p1HeaderLabel.position = CGPoint(x: halfWidth * 0.5, y: buttonAreaY + buttonSize * 1.8)
+        p1HeaderLabel.name = "p2p_divider"
+        addChild(p1HeaderLabel)
+
+        let p2HeaderLabel = SKLabelNode(text: "玩家 2")
+        p2HeaderLabel.fontSize = 13
+        p2HeaderLabel.fontColor = SKColor(red: 1.0, green: 0.2, blue: 0.5, alpha: 0.9)
+        p2HeaderLabel.fontName = "Helvetica-Bold"
+        p2HeaderLabel.position = CGPoint(x: halfWidth + halfWidth * 0.5, y: buttonAreaY + buttonSize * 1.8)
+        p2HeaderLabel.name = "p2p_divider"
+        addChild(p2HeaderLabel)
+
+        // Buttons for each player
+        for (index, gesture) in gestures.enumerated() {
+            let p1X = halfWidth * 0.5 + CGFloat(index - 1) * spacing
+            let p2X = halfWidth + halfWidth * 0.5 + CGFloat(index - 1) * spacing
+
+            for (prefix, centerX) in [("p1", p1X), ("p2", p2X)] {
+                let bg = SKShapeNode(circleOfRadius: buttonSize * 0.7)
+                bg.fillColor = SKColor(red: 0.1, green: 0.05, blue: 0.2, alpha: 0.85)
+                bg.strokeColor = prefix == "p1"
+                    ? SKColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.8)
+                    : SKColor(red: 1.0, green: 0.0, blue: 0.6, alpha: 0.8)
+                bg.lineWidth = 2
+                bg.glowWidth = 3
+                bg.position = CGPoint(x: centerX, y: buttonAreaY)
+                bg.name = "\(prefix)_gesture_\(gesture)"
+                addChild(bg)
+
+                let label = SKLabelNode(text: gesture.emoji)
+                label.fontSize = buttonSize
+                label.position = CGPoint(x: centerX, y: buttonAreaY - buttonSize * 0.25)
+                label.name = "\(prefix)_gesture_\(gesture)"
+                addChild(label)
+            }
         }
     }
 
@@ -1096,6 +1220,83 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         }
     }
     
+    // MARK: - Local Multiplayer Gesture Selection
+
+    private func handleP1GestureSelection(_ gesture: Gesture) {
+        guard !p1GestureChosen else { return }
+        p1GestureChosen = true
+        playerGesture = gesture
+        playerGestureHistory.append(gesture)
+        gestureCountsThisGame[gesture, default: 0] += 1
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        playSelectSound()
+        // Dim unchosen P1 buttons
+        children.filter { $0.name?.hasPrefix("p1_gesture_") == true && $0.name != "p1_gesture_\(gesture)" }
+            .forEach { $0.alpha = 0.25 }
+        updateP2PGestureInstruction()
+        checkBothGesturesSelected()
+    }
+
+    private func handleP2GestureSelection(_ gesture: Gesture) {
+        guard !p2GestureChosen else { return }
+        p2GestureChosen = true
+        aiGesture = gesture
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        playSelectSound()
+        // Dim unchosen P2 buttons
+        children.filter { $0.name?.hasPrefix("p2_gesture_") == true && $0.name != "p2_gesture_\(gesture)" }
+            .forEach { $0.alpha = 0.25 }
+        updateP2PGestureInstruction()
+        checkBothGesturesSelected()
+    }
+
+    private func updateP2PGestureInstruction() {
+        let p1 = p1GestureChosen ? "✅" : "⏳"
+        let p2 = p2GestureChosen ? "✅" : "⏳"
+        instructionLabel?.text = "玩家1\(p1)  玩家2\(p2)"
+    }
+
+    private func checkBothGesturesSelected() {
+        guard p1GestureChosen, p2GestureChosen,
+              let g1 = playerGesture, let g2 = aiGesture else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            // Remove all gesture buttons and divider
+            self.children.filter {
+                $0.name?.hasPrefix("p1_gesture_") == true ||
+                $0.name?.hasPrefix("p2_gesture_") == true ||
+                $0.name == "p2p_divider"
+            }.forEach { $0.removeFromParent() }
+
+            self.playerGestureLabel?.text = g1.emoji
+            self.aiGestureLabel?.text = g2.emoji
+
+            // Dim then reveal both gestures
+            let dimOverlay = SKShapeNode(rect: CGRect(origin: .zero, size: self.size))
+            dimOverlay.fillColor = .black
+            dimOverlay.alpha = 0
+            dimOverlay.zPosition = 80
+            dimOverlay.name = "revealDim"
+            self.addChild(dimOverlay)
+            dimOverlay.run(SKAction.fadeAlpha(to: 0.3, duration: 0.2))
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                self.playerCharacter?.animateGestureReveal(g1)
+                self.characterNode?.animateGestureReveal(g2)
+                AnnouncementNode.flashScreen(color: .white, in: self)
+                dimOverlay.run(SKAction.sequence([
+                    SKAction.wait(forDuration: 0.8),
+                    SKAction.fadeAlpha(to: 0, duration: 0.3),
+                    SKAction.removeFromParent()
+                ]))
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                self.startDirectionPointingPhase()
+            }
+        }
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
@@ -1132,11 +1333,14 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
 
         // Handle game over buttons
         if touchedNode.name == "playAgainButton" {
-            childNode(withName: "gameOverNode")?.removeFromParent()
-            resetFullGame()
+            touchedNode.run(AnimationKit.springPop(scale: 1.22, duration: 0.25)) {
+                self.childNode(withName: "gameOverNode")?.removeFromParent()
+                self.resetFullGame()
+            }
             return
         }
         if touchedNode.name == "changeCharacterButton" {
+            touchedNode.run(AnimationKit.springPop(scale: 1.22, duration: 0.25))
             // Go back to character selection
             childNode(withName: "gameOverNode")?.removeFromParent()
             if let vc = self.view?.next as? UIViewController {
@@ -1148,37 +1352,29 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             return
         }
 
-        if case .gestureSelection = gamePhase,
-           let nodeName = touchedNode.name,
-           nodeName.hasPrefix("gesture_") {
-            let gestureString = String(nodeName.dropFirst(8))
-            
-            switch gestureString {
-            case "rock":
-                selectGesture(.rock)
-            case "paper":
-                selectGesture(.paper)
-            case "scissors":
-                selectGesture(.scissors)
-            default:
-                break
+        if case .gestureSelection = gamePhase, let nodeName = touchedNode.name {
+            // Tap pop feedback on the touched button node
+            touchedNode.run(AnimationKit.springPop(scale: 1.3, duration: 0.3))
+            if gameMode == .localMultiplayer {
+                if nodeName.hasPrefix("p1_gesture_") {
+                    if let g = parseGesture(String(nodeName.dropFirst(11))) { handleP1GestureSelection(g) }
+                } else if nodeName.hasPrefix("p2_gesture_") {
+                    if let g = parseGesture(String(nodeName.dropFirst(11))) { handleP2GestureSelection(g) }
+                }
+            } else if nodeName.hasPrefix("gesture_") {
+                if let g = parseGesture(String(nodeName.dropFirst(8))) { selectGesture(g) }
             }
-        } else if case .directionPointing = gamePhase,
-                  let nodeName = touchedNode.name,
-                  nodeName.hasPrefix("direction_") {
-            let directionString = String(nodeName.dropFirst(10))
-            
-            switch directionString {
-            case "up":
-                selectDirection(.up)
-            case "down":
-                selectDirection(.down)
-            case "left":
-                selectDirection(.left)
-            case "right":
-                selectDirection(.right)
-            default:
-                break
+        } else if case .directionPointing = gamePhase, let nodeName = touchedNode.name {
+            // Tap pop feedback on the touched button node
+            touchedNode.run(AnimationKit.springPop(scale: 1.3, duration: 0.3))
+            if gameMode == .localMultiplayer {
+                if nodeName.hasPrefix("p1_direction_") {
+                    if let d = parseDirection(String(nodeName.dropFirst(13))) { handleP1DirectionSelection(d) }
+                } else if nodeName.hasPrefix("p2_direction_") {
+                    if let d = parseDirection(String(nodeName.dropFirst(13))) { handleP2DirectionSelection(d) }
+                }
+            } else if nodeName.hasPrefix("direction_") {
+                if let d = parseDirection(String(nodeName.dropFirst(10))) { selectDirection(d) }
             }
         }
     }
@@ -1186,27 +1382,96 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {}
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {}
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {}
+
+    // MARK: - Touch Parsing Helpers
+
+    private func parseGesture(_ s: String) -> Gesture? {
+        switch s {
+        case "rock":     return .rock
+        case "paper":    return .paper
+        case "scissors": return .scissors
+        default:         return nil
+        }
+    }
+
+    private func parseDirection(_ s: String) -> Direction? {
+        switch s {
+        case "up":    return .up
+        case "down":  return .down
+        case "left":  return .left
+        case "right": return .right
+        default:      return nil
+        }
+    }
+
+    // MARK: - Local Multiplayer Direction Selection
+
+    private func handleP1DirectionSelection(_ direction: Direction) {
+        guard !p1DirectionChosen else { return }
+        p1DirectionChosen = true
+        playerDirection = direction
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        playSelectSound()
+        playerCharacter?.animateDirectionPoint(direction)
+        children.filter { $0.name?.hasPrefix("p1_direction_") == true && $0.name != "p1_direction_\(direction)" }
+            .forEach { $0.alpha = 0.25 }
+        updateP2PDirectionInstruction()
+        checkBothDirectionsSelected()
+    }
+
+    private func handleP2DirectionSelection(_ direction: Direction) {
+        guard !p2DirectionChosen else { return }
+        p2DirectionChosen = true
+        aiDirection = direction
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        playSelectSound()
+        characterNode?.animateDirectionPoint(direction)
+        children.filter { $0.name?.hasPrefix("p2_direction_") == true && $0.name != "p2_direction_\(direction)" }
+            .forEach { $0.alpha = 0.25 }
+        updateP2PDirectionInstruction()
+        checkBothDirectionsSelected()
+    }
+
+    private func updateP2PDirectionInstruction() {
+        let p1 = p1DirectionChosen ? "✅" : "⏳"
+        let p2 = p2DirectionChosen ? "✅" : "⏳"
+        instructionLabel?.text = "玩家1\(p1)  玩家2\(p2)"
+    }
+
+    private func checkBothDirectionsSelected() {
+        guard p1DirectionChosen, p2DirectionChosen else { return }
+        children.filter {
+            $0.name?.hasPrefix("p1_direction_") == true ||
+            $0.name?.hasPrefix("p2_direction_") == true ||
+            $0.name == "p2p_dir_divider"
+        }.forEach { $0.removeFromParent() }
+        showResult()
+    }
     
     
     private func startDirectionPointingPhase() {
         gamePhase = .directionPointing
         phaseLabel?.text = "指向选择"
 
-        // AI chooses direction strategically based on gesture match state
-        let sameGesture = playerGesture == aiGesture
-        if sameGesture {
-            instructionLabel?.text = "手势相同，选择相同方向"
-            // Same gesture: AI wants to match player's direction
-            // Favor up/right as humans tend to pick these more often
-            aiDirection = chooseAIDirection(favoredDirections: [.up, .right])
+        if gameMode == .localMultiplayer {
+            p1DirectionChosen = false
+            p2DirectionChosen = false
+            playerDirection = nil
+            aiDirection = nil
+            let sameGesture = playerGesture == aiGesture
+            instructionLabel?.text = sameGesture ? "手势相同，双人选相同方向" : "手势不同，双人选不同方向"
+            showDirectionButtons()
         } else {
-            instructionLabel?.text = "手势不同，选择不同方向"
-            // Different gesture: AI wants to differ from player's direction
-            // Spread evenly since we want to avoid matching
-            aiDirection = Direction.allCases.randomElement() ?? .up
+            let sameGesture = playerGesture == aiGesture
+            if sameGesture {
+                instructionLabel?.text = "手势相同，选择相同方向"
+                aiDirection = chooseAIDirection(favoredDirections: [.up, .right])
+            } else {
+                instructionLabel?.text = "手势不同，选择不同方向"
+                aiDirection = Direction.allCases.randomElement() ?? .up
+            }
+            showDirectionButtons()
         }
-
-        showDirectionButtons()
     }
 
     private func chooseAIDirection(favoredDirections: [Direction]) -> Direction {
@@ -1225,25 +1490,29 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func showDirectionButtons() {
+        if gameMode == .localMultiplayer {
+            showDirectionButtonsForP2P()
+            return
+        }
+
         let directions: [Direction] = [.up, .down, .left, .right]
-        // Dynamic direction button positioning
-        let screenHeight = size.height
         let screenWidth = size.width
-        let centerX = screenWidth/2
-        let centerY = screenHeight * 0.3  // 30% from bottom
+        let screenHeight = size.height
+        let centerX = screenWidth / 2
+        let centerY = screenHeight * 0.3
         let buttonSize = min(screenWidth, screenHeight) * 0.06
         let offset = screenWidth * 0.15
-        
+
         let positions = [
-            CGPoint(x: centerX, y: centerY + offset),      // up
-            CGPoint(x: centerX, y: centerY - offset),      // down
-            CGPoint(x: centerX - offset, y: centerY),      // left
-            CGPoint(x: centerX + offset, y: centerY)       // right
+            CGPoint(x: centerX, y: centerY + offset),
+            CGPoint(x: centerX, y: centerY - offset),
+            CGPoint(x: centerX - offset, y: centerY),
+            CGPoint(x: centerX + offset, y: centerY)
         ]
-        
+
         for (index, direction) in directions.enumerated() {
-            // Neon button background
-            let buttonBg = SKShapeNode(circleOfRadius: buttonSize*0.8)
+            let delay = TimeInterval(index) * 0.06
+            let buttonBg = SKShapeNode(circleOfRadius: buttonSize * 0.8)
             buttonBg.fillColor = SKColor(red: 0.15, green: 0.05, blue: 0.1, alpha: 0.85)
             buttonBg.strokeColor = SKColor(red: 1.0, green: 0.0, blue: 0.8, alpha: 0.8)
             buttonBg.lineWidth = 2
@@ -1251,20 +1520,92 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             buttonBg.position = positions[index]
             buttonBg.name = "direction_\(direction)"
             addChild(buttonBg)
-            
-            // Dynamic arrow label
+            AnimationKit.springPopIn(buttonBg, delay: delay)
+
             let button = SKLabelNode(text: direction.emoji)
             button.fontSize = buttonSize
-            button.position = CGPoint(x: positions[index].x, y: positions[index].y - buttonSize*0.2)
+            button.position = CGPoint(x: positions[index].x, y: positions[index].y - buttonSize * 0.2)
             button.name = "direction_\(direction)"
             addChild(button)
+            AnimationKit.springPopIn(button, delay: delay + 0.04)
         }
 
-        // Start selection timer
         startSelectionTimer(buttonAreaY: centerY + offset + buttonSize * 1.5) {
             let randomDirection = Direction.allCases.randomElement() ?? .up
             self.selectDirection(randomDirection)
             self.instructionLabel?.text = "超时！随机选择：\(randomDirection.emoji)"
+        }
+    }
+
+    private func showDirectionButtonsForP2P() {
+        let directions: [Direction] = [.up, .down, .left, .right]
+        let screenWidth = size.width
+        let screenHeight = size.height
+        let halfWidth = screenWidth / 2
+        let centerY = screenHeight * 0.3
+        let buttonSize = min(screenWidth, screenHeight) * 0.055
+        let offset = halfWidth * 0.28
+
+        // Divider
+        let divider = SKShapeNode()
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: halfWidth, y: centerY - offset - buttonSize * 2))
+        path.addLine(to: CGPoint(x: halfWidth, y: centerY + offset + buttonSize * 2))
+        divider.path = path
+        divider.strokeColor = SKColor(white: 1.0, alpha: 0.15)
+        divider.lineWidth = 1
+        divider.name = "p2p_dir_divider"
+        addChild(divider)
+
+        // Player labels
+        let p1HeaderLabel = SKLabelNode(text: "玩家 1")
+        p1HeaderLabel.fontSize = 13
+        p1HeaderLabel.fontColor = SKColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 0.9)
+        p1HeaderLabel.fontName = "Helvetica-Bold"
+        p1HeaderLabel.position = CGPoint(x: halfWidth * 0.5, y: centerY + offset + buttonSize * 1.5)
+        p1HeaderLabel.name = "p2p_dir_divider"
+        addChild(p1HeaderLabel)
+
+        let p2HeaderLabel = SKLabelNode(text: "玩家 2")
+        p2HeaderLabel.fontSize = 13
+        p2HeaderLabel.fontColor = SKColor(red: 1.0, green: 0.2, blue: 0.5, alpha: 0.9)
+        p2HeaderLabel.fontName = "Helvetica-Bold"
+        p2HeaderLabel.position = CGPoint(x: halfWidth + halfWidth * 0.5, y: centerY + offset + buttonSize * 1.5)
+        p2HeaderLabel.name = "p2p_dir_divider"
+        addChild(p2HeaderLabel)
+
+        // D-pad positions: up/down/left/right for each player
+        let p1Center = CGPoint(x: halfWidth * 0.5, y: centerY)
+        let p2Center = CGPoint(x: halfWidth + halfWidth * 0.5, y: centerY)
+
+        let offsets: [(Direction, CGPoint)] = [
+            (.up,    CGPoint(x: 0, y: offset)),
+            (.down,  CGPoint(x: 0, y: -offset)),
+            (.left,  CGPoint(x: -offset, y: 0)),
+            (.right, CGPoint(x: offset, y: 0))
+        ]
+
+        for (direction, dOffset) in offsets {
+            for (prefix, base) in [("p1", p1Center), ("p2", p2Center)] {
+                let pos = CGPoint(x: base.x + dOffset.x, y: base.y + dOffset.y)
+
+                let bg = SKShapeNode(circleOfRadius: buttonSize * 0.8)
+                bg.fillColor = SKColor(red: 0.15, green: 0.05, blue: 0.1, alpha: 0.85)
+                bg.strokeColor = prefix == "p1"
+                    ? SKColor(red: 0.0, green: 0.9, blue: 1.0, alpha: 0.8)
+                    : SKColor(red: 1.0, green: 0.0, blue: 0.6, alpha: 0.8)
+                bg.lineWidth = 2
+                bg.glowWidth = 3
+                bg.position = pos
+                bg.name = "\(prefix)_direction_\(direction)"
+                addChild(bg)
+
+                let label = SKLabelNode(text: direction.emoji)
+                label.fontSize = buttonSize
+                label.position = CGPoint(x: pos.x, y: pos.y - buttonSize * 0.2)
+                label.name = "\(prefix)_direction_\(direction)"
+                addChild(label)
+            }
         }
     }
 
@@ -1313,14 +1654,13 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             showSuccessEffect()
             playerCharacter?.setExpression(.neutral)
             characterNode?.setExpression(.neutral)
-            // Combo announcement
             AnnouncementNode.showCombo(streak: currentStreak, in: self)
             AnnouncementNode.updateStreakBorder(streak: currentStreak, in: self)
         case .playerLoses:
             let multiplier = max(1, currentStreak)
             totalDrinksThisGame += multiplier
             resultText = "违反规则!"
-            winner = "玩家失败 😢"
+            winner = gameMode == .localMultiplayer ? "玩家1 失败 😢" : "玩家失败 😢"
             currentStreak = 0
             gameScore.ai += 1
             UINotificationFeedbackGenerator().notificationOccurred(.error)
@@ -1334,7 +1674,7 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             let multiplier = max(1, currentStreak)
             totalDrinksThisGame += multiplier
             resultText = "违反规则!"
-            winner = "对手失败 🎉"
+            winner = gameMode == .localMultiplayer ? "玩家2 失败 🎉" : "对手失败 🎉"
             currentStreak = 0
             gameScore.player += 1
             UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -1398,6 +1738,29 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
 
         totalGamesPlayed += 1
         if playerWon { totalWins += 1 }
+        totalRoundsEver += roundCount
+
+        // Achievements
+        if playerWon {
+            AchievementsManager.shared.recordPlayerWin(
+                gameMode: gameMode,
+                characterID: playerStyle.id,
+                currentStreak: bestStreakThisGame
+            )
+        }
+        if gameMode == .localMultiplayer {
+            AchievementsManager.shared.recordLocalGame()
+        }
+
+        // Game Center leaderboards
+        GameCenterManager.shared.submitWinStreak(bestStreakThisGame)
+        GameCenterManager.shared.submitTotalWins(totalWins)
+        GameCenterManager.shared.submitRoundsPlayed(totalRoundsEver)
+
+        // Award coins and update HUD
+        let coinsEarned = AccessoryStore.shared.awardCoinsForGame(
+            playerWon: playerWon, roundsPlayed: roundCount, bestStreak: bestStreakThisGame)
+        updateCoinHUD()
 
         // Find favorite gesture
         let favorite = gestureCountsThisGame.max(by: { $0.value < $1.value })?.key ?? .rock
@@ -1407,12 +1770,13 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
             size: size,
             playerScore: gameScore.player,
             aiScore: gameScore.ai,
-            playerName: playerStyle.name,
-            opponentName: opponentStyle.name,
+            playerName: gameMode == .localMultiplayer ? "玩家 1" : playerStyle.name,
+            opponentName: gameMode == .localMultiplayer ? "玩家 2" : opponentStyle.name,
             totalDrinks: totalDrinksThisGame,
             bestStreak: bestStreakThisGame,
             favoriteGesture: favorite.emoji,
-            roundsPlayed: roundCount
+            roundsPlayed: roundCount,
+            coinsEarned: coinsEarned
         )
         gameOver.name = "gameOverNode"
         gameOver.zPosition = 300
@@ -1434,6 +1798,10 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
         aiGesture = nil
         playerDirection = nil
         aiDirection = nil
+        p1GestureChosen = false
+        p2GestureChosen = false
+        p1DirectionChosen = false
+        p2DirectionChosen = false
         playerGestureLabel?.text = ""
         aiGestureLabel?.text = ""
         cancelSelectionTimer()
@@ -1465,7 +1833,9 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
 
     private func updateScoreDisplay() {
         if let scoreLabel = childNode(withName: "scoreLabel") as? SKLabelNode {
-            var text = "玩家 \(gameScore.player) : \(gameScore.ai) 对手  (\(roundCount)/\(maxRounds))"
+            let p1Name = "玩家1"
+            let p2Name = gameMode == .localMultiplayer ? "玩家2" : "对手"
+            var text = "\(p1Name) \(gameScore.player) : \(gameScore.ai) \(p2Name)  (\(roundCount)/\(maxRounds))"
             if currentStreak > 0 {
                 text += " 🔥x\(currentStreak)"
             }
@@ -1550,128 +1920,59 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
 
     private func showSuccessEffect() {
-        // Create sparkle effect for correct moves
-        let sparkleCount = 20
-        for _ in 0..<sparkleCount {
-            let sparkle = SKShapeNode(circleOfRadius: 2)
-            sparkle.fillColor = .yellow
-            sparkle.strokeColor = .white
-            sparkle.alpha = 1.0
-            
-            let randomX = CGFloat.random(in: 0...size.width)
-            let randomY = CGFloat.random(in: 0...size.height)
-            sparkle.position = CGPoint(x: randomX, y: randomY)
-            addChild(sparkle)
-            
-            let fadeOut = SKAction.fadeOut(withDuration: 1.5)
-            let scale = SKAction.scale(to: 0.1, duration: 1.5)
-            let remove = SKAction.removeFromParent()
-            let sequence = SKAction.sequence([SKAction.group([fadeOut, scale]), remove])
-            
-            sparkle.run(sequence)
-        }
-        
-        // Add screen flash effect
-        let flash = SKShapeNode(rect: CGRect(origin: CGPoint.zero, size: size))
-        flash.fillColor = .yellow
-        flash.alpha = 0.3
-        addChild(flash)
-        
-        let flashSequence = SKAction.sequence([
-            SKAction.fadeOut(withDuration: 0.2),
-            SKAction.removeFromParent()
-        ])
-        flash.run(flashSequence)
+        let center = CGPoint(x: size.width * 0.35, y: size.height * 0.55)
+        AnimationKit.particleBurst(
+            at: center,
+            colors: [.cyan, SKColor(red: 0.4, green: 1.0, blue: 0.5, alpha: 1),
+                     .yellow, .white],
+            count: 18, radius: 3.5, spread: 90, zPosition: 175, in: self
+        )
+        AnimationKit.chromaFlash(
+            color: SKColor(red: 0.2, green: 1.0, blue: 0.6, alpha: 1),
+            intensity: 0.30, in: self
+        )
     }
-    
+
     private func showVictoryEffect() {
-        // Create fireworks effect for player victory
-        let fireworkCount = 15
-        for _ in 0..<fireworkCount {
-            let firework = SKShapeNode(circleOfRadius: 4)
-            firework.fillColor = .green
-            firework.strokeColor = .white
-            firework.alpha = 1.0
-            
-            let centerX = size.width / 2
-            let centerY = size.height / 2
-            firework.position = CGPoint(x: centerX, y: centerY)
-            addChild(firework)
-            
-            let randomAngle = CGFloat.random(in: 0...(2 * .pi))
-            let distance = CGFloat.random(in: 100...200)
-            let endX = centerX + cos(randomAngle) * distance
-            let endY = centerY + sin(randomAngle) * distance
-            
-            let move = SKAction.move(to: CGPoint(x: endX, y: endY), duration: 1.0)
-            move.timingMode = .easeOut
-            let fadeOut = SKAction.fadeOut(withDuration: 1.0)
-            let scale = SKAction.scale(to: 2.0, duration: 1.0)
-            let remove = SKAction.removeFromParent()
-            
-            let sequence = SKAction.sequence([SKAction.group([move, fadeOut, scale]), remove])
-            firework.run(sequence)
+        let cx = size.width / 2
+        let cy = size.height / 2
+        let gold   = SKColor(red: 1.0, green: 0.85, blue: 0.1, alpha: 1)
+        let pink   = SKColor(red: 1.0, green: 0.2,  blue: 0.7, alpha: 1)
+        let cyan   = SKColor.cyan
+        let colors = [gold, pink, cyan, .white]
+
+        // Three staggered firework bursts
+        let origins: [(CGPoint, TimeInterval)] = [
+            (CGPoint(x: cx,         y: cy + 60),  0.0),
+            (CGPoint(x: cx - 90,    y: cy - 20),  0.18),
+            (CGPoint(x: cx + 90,    y: cy - 10),  0.32)
+        ]
+        for (pt, delay) in origins {
+            run(SKAction.sequence([
+                SKAction.wait(forDuration: delay),
+                SKAction.run { AnimationKit.fireworkBurst(at: pt, colors: colors, in: self, count: 14) }
+            ]))
         }
-        
-        // Add celebration text
-        let celebrationLabel = SKLabelNode(text: "🎉 胜利! 🎉")
-        celebrationLabel.fontSize = 40
-        celebrationLabel.fontColor = .green
-        celebrationLabel.position = CGPoint(x: size.width/2, y: size.height/2 + 100)
-        addChild(celebrationLabel)
-        
-        let bounceUp = SKAction.moveBy(x: 0, y: 20, duration: 0.3)
-        bounceUp.timingMode = .easeOut
-        let bounceDown = SKAction.moveBy(x: 0, y: -20, duration: 0.3)
-        bounceDown.timingMode = .easeIn
-        let bounce = SKAction.sequence([bounceUp, bounceDown])
-        let repeatBounce = SKAction.repeat(bounce, count: 3)
-        let fade = SKAction.fadeOut(withDuration: 1.0)
-        let remove = SKAction.removeFromParent()
-        
-        celebrationLabel.run(SKAction.sequence([repeatBounce, fade, remove]))
+
+        // Light shake + gold chroma flash
+        AnimationKit.screenShake(self, intensity: 8, duration: 0.45)
+        AnimationKit.chromaFlash(color: gold, intensity: 0.38, in: self)
     }
-    
+
     private func showFailureEffect() {
-        // Create screen shake effect for player failure
-        let originalPosition = position
-        let shakeDistance: CGFloat = 10
-        let shakeDuration: TimeInterval = 0.1
-        
-        let shakeLeft = SKAction.moveBy(x: -shakeDistance, y: 0, duration: shakeDuration)
-        let shakeRight = SKAction.moveBy(x: shakeDistance * 2, y: 0, duration: shakeDuration)
-        let shakeReturn = SKAction.moveBy(x: -shakeDistance, y: 0, duration: shakeDuration)
-        
-        let shakeSequence = SKAction.sequence([shakeLeft, shakeRight, shakeReturn])
-        let repeatShake = SKAction.repeat(shakeSequence, count: 3)
-        
-        run(repeatShake)
-        
-        // Add red overlay effect
-        let overlay = SKShapeNode(rect: CGRect(origin: CGPoint.zero, size: size))
-        overlay.fillColor = .red
-        overlay.alpha = 0.4
-        addChild(overlay)
-        
-        let overlaySequence = SKAction.sequence([
-            SKAction.wait(forDuration: 0.3),
-            SKAction.fadeOut(withDuration: 0.5),
-            SKAction.removeFromParent()
-        ])
-        overlay.run(overlaySequence)
-        
-        // Add failure text
-        let failureLabel = SKLabelNode(text: "😞 失败了...")
-        failureLabel.fontSize = 30
-        failureLabel.fontColor = .red
-        failureLabel.position = CGPoint(x: size.width/2, y: size.height/2 + 50)
-        addChild(failureLabel)
-        
-        let slideDown = SKAction.moveBy(x: 0, y: -30, duration: 1.0)
-        let fade = SKAction.fadeOut(withDuration: 1.0)
-        let remove = SKAction.removeFromParent()
-        
-        failureLabel.run(SKAction.sequence([SKAction.group([slideDown, fade]), remove]))
+        let red  = SKColor(red: 1.0, green: 0.1, blue: 0.1, alpha: 1)
+        let dark = SKColor(red: 0.6, green: 0.0, blue: 0.0, alpha: 1)
+
+        // Heavy shake
+        AnimationKit.screenShake(self, intensity: 16, duration: 0.6)
+        // Chromatic red flash
+        AnimationKit.chromaFlash(color: red, intensity: 0.50, in: self)
+        // Debris burst from center
+        AnimationKit.particleBurst(
+            at: CGPoint(x: size.width * 0.65, y: size.height * 0.55),
+            colors: [red, dark, .orange, .white],
+            count: 14, radius: 3.0, spread: 70, zPosition: 175, in: self
+        )
     }
 
     func handleShakeGesture() {
@@ -1735,26 +2036,34 @@ class GameScene: SKScene, SettingsViewControllerDelegate, GameRulesDelegate {
     }
     
     private func handleShakeInGestureSelectionPhase() {
-        // Randomly select a gesture when shaken
+        if gameMode == .localMultiplayer {
+            // Shake auto-selects for Player 1 only (they hold the device)
+            if !p1GestureChosen {
+                let randomGesture = Gesture.allCases.randomElement() ?? .rock
+                handleP1GestureSelection(randomGesture)
+                createShakeSelectionEffect()
+            }
+            return
+        }
         let randomGesture = Gesture.allCases.randomElement() ?? .rock
         selectGesture(randomGesture)
-        
-        // Visual feedback for shake selection
         createShakeSelectionEffect()
-        
-        // Update instruction
         instructionLabel?.text = "摇动选择：\(randomGesture.emoji) - 好选择！"
     }
-    
+
     private func handleShakeInDirectionPointingPhase() {
-        // Randomly select a direction when shaken
+        if gameMode == .localMultiplayer {
+            // Shake auto-selects for Player 1 only
+            if !p1DirectionChosen {
+                let randomDirection = Direction.allCases.randomElement() ?? .up
+                handleP1DirectionSelection(randomDirection)
+                createShakeSelectionEffect()
+            }
+            return
+        }
         let randomDirection = Direction.allCases.randomElement() ?? .up
         selectDirection(randomDirection)
-        
-        // Visual feedback for shake selection
         createShakeSelectionEffect()
-        
-        // Update instruction
         instructionLabel?.text = "摇动选择：\(randomDirection.emoji) - 让我们看看结果！"
     }
     

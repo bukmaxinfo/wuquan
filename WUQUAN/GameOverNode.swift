@@ -20,6 +20,7 @@ class GameOverNode: SKNode {
     private let bestStreak: Int
     private let favoriteGesture: String
     private let roundsPlayed: Int
+    private let coinsEarned: Int
 
     // MARK: - Neon Colors
 
@@ -31,7 +32,9 @@ class GameOverNode: SKNode {
 
     // MARK: - Init
 
-    init(size: CGSize, playerScore: Int, aiScore: Int, playerName: String, opponentName: String, totalDrinks: Int, bestStreak: Int, favoriteGesture: String, roundsPlayed: Int) {
+    init(size: CGSize, playerScore: Int, aiScore: Int, playerName: String, opponentName: String,
+         totalDrinks: Int, bestStreak: Int, favoriteGesture: String, roundsPlayed: Int,
+         coinsEarned: Int = 0) {
         self.overlaySize = size
         self.playerScore = playerScore
         self.aiScore = aiScore
@@ -41,6 +44,7 @@ class GameOverNode: SKNode {
         self.bestStreak = bestStreak
         self.favoriteGesture = favoriteGesture
         self.roundsPlayed = roundsPlayed
+        self.coinsEarned = coinsEarned
         super.init()
         self.isUserInteractionEnabled = true
         self.zPosition = 1000
@@ -54,17 +58,19 @@ class GameOverNode: SKNode {
     // MARK: - Build
 
     private func buildOverlay() {
-        // Full-screen semi-transparent background
+        // Full-screen semi-transparent background — fades in
         let background = SKShapeNode(rect: CGRect(origin: CGPoint(x: -overlaySize.width / 2, y: -overlaySize.height / 2), size: overlaySize))
         background.fillColor = darkPurple
         background.strokeColor = .clear
         background.zPosition = 0
         background.name = "gameOverBackground"
+        background.alpha = 0
         addChild(background)
+        background.run(SKAction.fadeAlpha(to: 1.0, duration: 0.25))
 
         // Center panel
         let panelWidth = overlaySize.width * 0.85
-        let panelHeight = overlaySize.height * 0.72
+        let panelHeight = overlaySize.height * 0.80
         let panel = SKShapeNode(rectOf: CGSize(width: panelWidth, height: panelHeight), cornerRadius: 20)
         panel.fillColor = panelFill
         panel.strokeColor = cyanNeon.withAlphaComponent(0.6)
@@ -74,18 +80,17 @@ class GameOverNode: SKNode {
         panel.name = "gameOverPanel"
         addChild(panel)
 
-        // Start panel off-screen (below) for slide-in animation
-        let panelFinalY: CGFloat = 0
-        panel.position = CGPoint(x: 0, y: -overlaySize.height)
-
-        // Slide in with spring effect
-        let slideUp = SKAction.move(to: CGPoint(x: 0, y: panelFinalY), duration: 0.5)
-        slideUp.timingMode = .easeOut
-        let overshoot = SKAction.moveBy(x: 0, y: 20, duration: 0.1)
-        overshoot.timingMode = .easeOut
-        let settleBack = SKAction.moveBy(x: 0, y: -20, duration: 0.15)
-        settleBack.timingMode = .easeInEaseOut
-        panel.run(SKAction.sequence([slideUp, overshoot, settleBack]))
+        // Panel springs up from below with a proper spring settle
+        panel.position = CGPoint(x: 0, y: -overlaySize.height * 0.75)
+        panel.alpha = 0
+        let panelSlide = SKAction.group([
+            SKAction.move(to: CGPoint(x: 0, y: 18), duration: 0.45),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.20)
+        ])
+        panelSlide.timingMode = .easeOut
+        let panelSettle = SKAction.moveTo(y: 0, duration: 0.18)
+        panelSettle.timingMode = .easeInEaseOut
+        panel.run(SKAction.sequence([panelSlide, panelSettle]))
 
         // Layout positions (relative to panel center)
         let topY = panelHeight / 2
@@ -114,7 +119,7 @@ class GameOverNode: SKNode {
         titleLabel.zPosition = 2
         panel.addChild(titleLabel)
 
-        // Title glow
+        // Title glow layer
         let titleGlow = SKLabelNode(text: resultText)
         titleGlow.fontSize = titleLabel.fontSize
         titleGlow.fontColor = resultColor.withAlphaComponent(0.2)
@@ -124,18 +129,26 @@ class GameOverNode: SKNode {
         titleGlow.zPosition = 1
         panel.addChild(titleGlow)
 
-        // Pulse animation for winner text
-        let pulseGlow = SKAction.repeatForever(SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.1, duration: 0.8),
-            SKAction.fadeAlpha(to: 0.35, duration: 0.8)
-        ]))
-        titleGlow.run(pulseGlow)
+        // Spring pop-in for title (delayed until panel lands ~0.5s)
+        let panelLandDelay = 0.55
+        AnimationKit.springPopIn(titleLabel, delay: panelLandDelay, fromScale: 0.2)
+        AnimationKit.springPopIn(titleGlow,  delay: panelLandDelay + 0.04, fromScale: 0.2)
 
-        let pulseScale = SKAction.repeatForever(SKAction.sequence([
-            SKAction.scale(to: 1.05, duration: 0.9),
-            SKAction.scale(to: 1.0, duration: 0.9)
+        // After pop-in, continuous pulse
+        titleLabel.run(SKAction.sequence([
+            SKAction.wait(forDuration: panelLandDelay + 0.38),
+            SKAction.repeatForever(SKAction.sequence([
+                SKAction.scale(to: 1.05, duration: 0.9),
+                SKAction.scale(to: 1.0, duration: 0.9)
+            ]))
         ]))
-        titleLabel.run(pulseScale)
+        titleGlow.run(SKAction.sequence([
+            SKAction.wait(forDuration: panelLandDelay + 0.38),
+            SKAction.repeatForever(SKAction.sequence([
+                SKAction.fadeAlpha(to: 0.1, duration: 0.8),
+                SKAction.fadeAlpha(to: 0.35, duration: 0.8)
+            ]))
+        ]))
 
         currentY -= panelHeight * 0.12
 
@@ -216,7 +229,8 @@ class GameOverNode: SKNode {
             ("🍺", "Total drinks", "\(totalDrinks)"),
             ("🔥", "Best streak", "\(bestStreak)"),
             (favoriteGesture, "Favorite gesture", favoriteGesture),
-            ("📊", "Rounds", "\(roundsPlayed)")
+            ("📊", "Rounds", "\(roundsPlayed)"),
+            ("🪙", "Coins earned", "+\(coinsEarned)")
         ]
 
         for (index, stat) in stats.enumerated() {
@@ -229,16 +243,11 @@ class GameOverNode: SKNode {
                 yPosition: currentY - CGFloat(index) * statSpacing
             )
             statNode.zPosition = 2
-            statNode.alpha = 0
-
             panel.addChild(statNode)
 
-            // Staggered fade-in
-            let delay = 0.8 + Double(index) * 0.3
-            statNode.run(SKAction.sequence([
-                SKAction.wait(forDuration: delay),
-                SKAction.fadeAlpha(to: 1.0, duration: 0.3)
-            ]))
+            // Staggered slide-up with scale punch
+            let delay = 0.75 + Double(index) * 0.12
+            AnimationKit.slideUpIn(statNode, offset: 30, delay: delay)
         }
 
         currentY -= statSpacing * CGFloat(stats.count) + panelHeight * 0.04
@@ -261,6 +270,7 @@ class GameOverNode: SKNode {
         )
         playAgainButton.zPosition = 2
         panel.addChild(playAgainButton)
+        AnimationKit.springPopIn(playAgainButton, delay: 1.35)
 
         // Change Character button — magenta neon
         let changeButton = createNeonButton(
@@ -274,6 +284,7 @@ class GameOverNode: SKNode {
         )
         changeButton.zPosition = 2
         panel.addChild(changeButton)
+        AnimationKit.springPopIn(changeButton, delay: 1.48)
     }
 
     // MARK: - Helpers
@@ -344,8 +355,16 @@ class GameOverNode: SKNode {
 
         for i in 1...steps {
             let value = Int(round(Double(i) / Double(steps) * Double(targetValue)))
+            let isLast = (i == steps)
             actions.append(SKAction.run { [weak label] in
                 label?.text = "\(value)"
+                // Scale punch on each tick, bigger on final
+                let sc: CGFloat = isLast ? 1.35 : 1.15
+                let up = SKAction.scale(to: sc, duration: stepDuration * 0.3)
+                up.timingMode = .easeOut
+                let down = SKAction.scale(to: 1.0, duration: stepDuration * 0.5)
+                down.timingMode = .easeOut
+                label?.run(SKAction.sequence([up, down]))
             })
             actions.append(SKAction.wait(forDuration: stepDuration))
         }
